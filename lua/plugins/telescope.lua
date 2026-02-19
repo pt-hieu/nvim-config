@@ -1,6 +1,7 @@
 return {
 	'nvim-telescope/telescope.nvim',
-	event = 'VimEnter',
+	cmd = 'Telescope',
+	keys = { '<leader>sh', '<leader>sk', '<leader>sf', '<leader>ss', '<leader>sw', '<leader>sg', '<leader>sgf', '<leader>st', '<leader>sd', '<leader>sr', '<leader>/', '<leader>s/', '<leader>sn', '<leader>sS' },
 	dependencies = {
 		'nvim-lua/plenary.nvim',
 		{
@@ -20,11 +21,25 @@ return {
 		},
 	},
 	config = function()
+		local colors = require('config.colors')
+
 		-- Set Aura purple border highlight
-		vim.api.nvim_set_hl(0, 'TelescopeBorder', { fg = '#a277ff' })
-		vim.api.nvim_set_hl(0, 'TelescopePromptBorder', { fg = '#a277ff' })
-		vim.api.nvim_set_hl(0, 'TelescopeResultsBorder', { fg = '#a277ff' })
-		vim.api.nvim_set_hl(0, 'TelescopePreviewBorder', { fg = '#a277ff' })
+		vim.api.nvim_set_hl(0, 'TelescopeBorder', { fg = colors.purple })
+		vim.api.nvim_set_hl(0, 'TelescopePromptBorder', { fg = colors.purple })
+		vim.api.nvim_set_hl(0, 'TelescopeResultsBorder', { fg = colors.purple })
+		vim.api.nvim_set_hl(0, 'TelescopePreviewBorder', { fg = colors.purple })
+
+		local ignore_patterns = {
+			'node_modules',
+			'.git/',
+			'dist/',
+			'build/',
+			'__generated__',
+			'__snapshots__/',
+			'%.snap$',
+			'%.test%.',
+			'%.spec%.',
+		}
 
 		require('telescope').setup({
 			defaults = {
@@ -40,32 +55,8 @@ return {
 				},
 			},
 			pickers = {
-				find_files = {
-					file_ignore_patterns = {
-						'node_modules',
-						'.git/',
-						'dist/',
-						'build/',
-						'__generated__',
-						'__snapshots__/',
-						'%.snap$',
-					'%.test%.',
-					'%.spec%.',
-					},
-				},
-				live_grep = {
-					file_ignore_patterns = {
-						'node_modules',
-						'.git/',
-						'dist/',
-						'build/',
-						'__generated__',
-						'__snapshots__/',
-						'%.snap$',
-					'%.test%.',
-					'%.spec%.',
-					},
-				},
+				find_files = { file_ignore_patterns = ignore_patterns },
+				live_grep = { file_ignore_patterns = ignore_patterns },
 			},
 			extensions = {
 				['ui-select'] = {

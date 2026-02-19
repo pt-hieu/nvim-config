@@ -98,15 +98,23 @@ local function get_context()
   local bufnr = vim.api.nvim_get_current_buf()
   local cursor = vim.api.nvim_win_get_cursor(0)
   local row, col = cursor[1], cursor[2]
-  local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
+
+  -- Read only the lines needed for context (avoid full buffer read)
+  local total_lines = vim.api.nvim_buf_line_count(bufnr)
+  local start_line = math.max(1, row - M.config.context_lines)
+  local fetch_end = math.min(total_lines, row + M.config.context_lines)
+  local slice = vim.api.nvim_buf_get_lines(bufnr, start_line - 1, fetch_end, false)
+
+  local function get_line(line_num)
+    return slice[line_num - start_line + 1] or ''
+  end
 
   -- Build prefix (lines before cursor + current line up to cursor)
   local prefix_lines = {}
-  local start_line = math.max(1, row - M.config.context_lines)
   for i = start_line, row - 1 do
-    table.insert(prefix_lines, lines[i])
+    table.insert(prefix_lines, get_line(i))
   end
-  local current_line = lines[row] or ''
+  local current_line = get_line(row)
   local prefix_part = current_line:sub(1, col)
   table.insert(prefix_lines, prefix_part)
   local prefix = table.concat(prefix_lines, '\n')
@@ -117,9 +125,8 @@ local function get_context()
   if suffix_part ~= '' then
     table.insert(suffix_lines, suffix_part)
   end
-  local end_line = math.min(#lines, row + M.config.context_lines)
-  for i = row + 1, end_line do
-    table.insert(suffix_lines, lines[i])
+  for i = row + 1, fetch_end do
+    table.insert(suffix_lines, get_line(i))
   end
   local suffix = table.concat(suffix_lines, '\n')
 

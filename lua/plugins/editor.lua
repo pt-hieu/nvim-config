@@ -1,6 +1,6 @@
 return {
 	-- Auto-detect indentation
-	'NMAC427/guess-indent.nvim',
+	{ 'NMAC427/guess-indent.nvim', event = 'BufReadPost' },
 
 	-- Auto-close brackets/quotes
 	{

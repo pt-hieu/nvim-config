@@ -5,20 +5,26 @@ return {
 		local conditions = require('heirline.conditions')
 		local utils = require('heirline.utils')
 
+		-- Cached optional module references (loaded once on first use)
+		local _llm_ghost = nil
+		local _bb_state = nil
+		local function get_llm_ghost()
+			if _llm_ghost == nil then
+				local ok, m = pcall(require, 'llm-ghost')
+				_llm_ghost = ok and m or false
+			end
+			return _llm_ghost ~= false and _llm_ghost or nil
+		end
+		local function get_bb_state()
+			if _bb_state == nil then
+				local ok, m = pcall(require, 'bitbucket.state')
+				_bb_state = ok and m or false
+			end
+			return _bb_state ~= false and _bb_state or nil
+		end
+
 		-- Aura theme colors
-		local colors = {
-			purple = '#a277ff',
-			green = '#61ffca',
-			orange = '#ffca85',
-			pink = '#f694ff',
-			blue = '#82e2ff',
-			red = '#ff6767',
-			white = '#edecee',
-			gray = '#6d6d6d',
-			black = '#15141b',
-			bg = '#1e1e2e',
-			fg = '#edecee',
-		}
+		local colors = vim.tbl_extend('force', require('config.colors'), { fg = '#edecee' })
 
 		-- Mode colors
 		local mode_colors = {
@@ -132,10 +138,11 @@ return {
 						hint_icon = '󰌶 ',
 					},
 					init = function(self)
-						self.errors = #vim.diagnostic.get(0, { severity = vim.diagnostic.severity.ERROR })
-						self.warnings = #vim.diagnostic.get(0, { severity = vim.diagnostic.severity.WARN })
-						self.hints = #vim.diagnostic.get(0, { severity = vim.diagnostic.severity.HINT })
-						self.info = #vim.diagnostic.get(0, { severity = vim.diagnostic.severity.INFO })
+						local counts = vim.diagnostic.count(0)
+						self.errors = counts[vim.diagnostic.severity.ERROR] or 0
+						self.warnings = counts[vim.diagnostic.severity.WARN] or 0
+						self.hints = counts[vim.diagnostic.severity.HINT] or 0
+						self.info = counts[vim.diagnostic.severity.INFO] or 0
 					end,
 					update = { 'DiagnosticChanged', 'BufEnter' },
 					{
@@ -168,8 +175,8 @@ return {
 				{
 					provider = ' 󱙺 ',
 					hl = function()
-						local ok, ghost = pcall(require, 'llm-ghost')
-						local connected = ok and ghost.is_server_ok()
+						local ghost = get_llm_ghost()
+						local connected = ghost and ghost.is_server_ok()
 						return { fg = connected and colors.purple or colors.red, bg = colors.black }
 					end,
 				},
@@ -177,8 +184,8 @@ return {
 				-- Bitbucket PR status (shows review mode when active)
 				{
 					provider = function()
-						local ok, bb_state = pcall(require, 'bitbucket.state')
-						if not ok then
+						local bb_state = get_bb_state()
+						if not bb_state then
 							return ' 󰊢 '
 						end
 						local has_pr = bb_state.has_pr()
@@ -192,8 +199,8 @@ return {
 						end
 					end,
 					hl = function()
-						local ok, bb_state = pcall(require, 'bitbucket.state')
-						if not ok then
+						local bb_state = get_bb_state()
+						if not bb_state then
 							return { fg = colors.gray, bg = colors.black }
 						end
 						local review_mode = bb_state.is_review_mode()
