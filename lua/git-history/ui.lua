@@ -5,6 +5,11 @@ local git = require('git-history.git')
 
 local M = {}
 
+-- Module-level namespaces (created once, reused across renders)
+local ns_commits = vim.api.nvim_create_namespace('git-history')
+local ns_cursor = vim.api.nvim_create_namespace('git-history-cursor')
+local ns_diff = vim.api.nvim_create_namespace('git-history-diff')
+
 function M.create_and_show()
   -- Create popups
   state.state.commit_popup = Popup({
@@ -53,11 +58,11 @@ function M.create_and_show()
   state.state.preview_buf = state.state.preview_popup.bufnr
 
   -- Set buffer options
-  vim.api.nvim_buf_set_option(state.state.commit_buf, 'modifiable', false)
-  vim.api.nvim_buf_set_option(state.state.commit_buf, 'buftype', 'nofile')
-  vim.api.nvim_buf_set_option(state.state.preview_buf, 'modifiable', false)
-  vim.api.nvim_buf_set_option(state.state.preview_buf, 'buftype', 'nofile')
-  vim.api.nvim_buf_set_option(state.state.preview_buf, 'number', true)
+  vim.bo[state.state.commit_buf].modifiable = false
+  vim.bo[state.state.commit_buf].buftype = 'nofile'
+  vim.bo[state.state.preview_buf].modifiable = false
+  vim.bo[state.state.preview_buf].buftype = 'nofile'
+  vim.wo[state.state.preview_popup.winid].number = true
 
   -- Set up keymaps
   M.setup_keymaps()
@@ -157,14 +162,22 @@ function M.render_commit_list()
   end
 
   -- Update buffer
-  vim.api.nvim_buf_set_option(state.state.commit_buf, 'modifiable', true)
+  vim.bo[state.state.commit_buf].modifiable = true
   vim.api.nvim_buf_set_lines(state.state.commit_buf, 0, -1, false, lines)
-  vim.api.nvim_buf_set_option(state.state.commit_buf, 'modifiable', false)
+  vim.bo[state.state.commit_buf].modifiable = false
 
   -- Apply highlights
-  local ns_id = vim.api.nvim_create_namespace('git-history')
+  vim.api.nvim_buf_clear_namespace(state.state.commit_buf, ns_commits, 0, -1)
   for _, hl in ipairs(highlights) do
-    vim.api.nvim_buf_add_highlight(state.state.commit_buf, ns_id, hl.hl_group, hl.line, hl.col_start, hl.col_end)
+    if hl.col_end == -1 then
+      -- To end of line: use extmark with hl_group, no end_col restricts to char; use add_highlight for -1 range
+      vim.api.nvim_buf_add_highlight(state.state.commit_buf, ns_commits, hl.hl_group, hl.line, hl.col_start, -1)
+    else
+      vim.api.nvim_buf_set_extmark(state.state.commit_buf, ns_commits, hl.line, hl.col_start, {
+        end_col = hl.col_end,
+        hl_group = hl.hl_group,
+      })
+    end
   end
 
   -- Highlight first commit
@@ -187,13 +200,14 @@ function M.move_cursor(direction)
 end
 
 function M.update_cursor_highlight()
-  local ns_id = vim.api.nvim_create_namespace('git-history-cursor')
-  vim.api.nvim_buf_clear_namespace(state.state.commit_buf, ns_id, 0, -1)
+  vim.api.nvim_buf_clear_namespace(state.state.commit_buf, ns_cursor, 0, -1)
 
-  -- Highlight 3 lines (skip blank line)
+  -- Highlight 3 lines (skip blank line) using line_hl_group for full-line coverage
   local start_line = (state.state.current_idx - 1) * 4
   for i = 0, 2 do
-    vim.api.nvim_buf_add_highlight(state.state.commit_buf, ns_id, 'GitHistoryCursor', start_line + i, 0, -1)
+    vim.api.nvim_buf_set_extmark(state.state.commit_buf, ns_cursor, start_line + i, 0, {
+      line_hl_group = 'GitHistoryCursor',
+    })
   end
 end
 
@@ -201,7 +215,9 @@ function M.preview_selected_commit()
   local commit = state.get_current_commit()
 
   -- Update preview title to indicate diff view
-  state.state.preview_popup.border:set_text('top', ' Diff @ ' .. commit.short_hash .. ' ', 'center')
+  if state.state.preview_popup and vim.api.nvim_win_is_valid(state.state.preview_popup.winid) then
+    state.state.preview_popup.border:set_text('top', ' Diff @ ' .. commit.short_hash .. ' ', 'center')
+  end
 
   -- Fetch commit diff
   git.get_commit_diff(commit.full_hash, state.state.file_path, function(err, lines)
@@ -211,12 +227,15 @@ function M.preview_selected_commit()
 
     -- Update preview buffer
     vim.schedule(function()
-      vim.api.nvim_buf_set_option(state.state.preview_buf, 'modifiable', true)
+      if not vim.api.nvim_buf_is_valid(state.state.preview_buf) then
+        return
+      end
+      vim.bo[state.state.preview_buf].modifiable = true
       vim.api.nvim_buf_set_lines(state.state.preview_buf, 0, -1, false, lines)
-      vim.api.nvim_buf_set_option(state.state.preview_buf, 'modifiable', false)
+      vim.bo[state.state.preview_buf].modifiable = false
 
       -- Set filetype to diff for syntax highlighting
-      vim.api.nvim_buf_set_option(state.state.preview_buf, 'filetype', 'diff')
+      vim.bo[state.state.preview_buf].filetype = 'diff'
 
       -- Apply custom highlights
       M.apply_diff_highlights()
@@ -225,8 +244,7 @@ function M.preview_selected_commit()
 end
 
 function M.apply_diff_highlights()
-  local ns_id = vim.api.nvim_create_namespace('git-history-diff')
-  vim.api.nvim_buf_clear_namespace(state.state.preview_buf, ns_id, 0, -1)
+  vim.api.nvim_buf_clear_namespace(state.state.preview_buf, ns_diff, 0, -1)
 
   local lines = vim.api.nvim_buf_get_lines(state.state.preview_buf, 0, -1, false)
 
@@ -251,7 +269,9 @@ function M.apply_diff_highlights()
     end
 
     if hl_group then
-      vim.api.nvim_buf_add_highlight(state.state.preview_buf, ns_id, hl_group, i - 1, 0, -1)
+      vim.api.nvim_buf_set_extmark(state.state.preview_buf, ns_diff, i - 1, 0, {
+        line_hl_group = hl_group,
+      })
     end
   end
 end

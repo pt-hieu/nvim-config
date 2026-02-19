@@ -2,14 +2,14 @@ local M = {}
 
 function M.scan_directory(path)
 	local entries = {}
-	local handle = vim.loop.fs_scandir(path)
+	local handle = vim.uv.fs_scandir(path)
 
 	if not handle then
 		return entries
 	end
 
 	while true do
-		local name, type = vim.loop.fs_scandir_next(handle)
+		local name, type = vim.uv.fs_scandir_next(handle)
 		if not name then
 			break
 		end
@@ -17,7 +17,7 @@ function M.scan_directory(path)
 		-- Determine type if not provided (some filesystems don't report it)
 		if not type then
 			local full_path = path .. '/' .. name
-			local stat = vim.loop.fs_stat(full_path)
+			local stat = vim.uv.fs_stat(full_path)
 			type = stat and stat.type or 'file'
 		end
 
@@ -43,17 +43,17 @@ function M.scan_directory(path)
 end
 
 function M.is_directory(path)
-	local stat = vim.loop.fs_stat(path)
+	local stat = vim.uv.fs_stat(path)
 	return stat and stat.type == 'directory'
 end
 
 function M.is_file(path)
-	local stat = vim.loop.fs_stat(path)
+	local stat = vim.uv.fs_stat(path)
 	return stat and stat.type == 'file'
 end
 
 function M.exists(path)
-	return vim.loop.fs_stat(path) ~= nil
+	return vim.uv.fs_stat(path) ~= nil
 end
 
 function M.get_parent(path)

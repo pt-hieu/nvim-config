@@ -40,18 +40,7 @@ return {
 	config = function(_, opts)
 		require('trouble').setup(opts)
 
-		-- Aura theme colors for trouble
-		local colors = {
-			purple = '#a277ff',
-			green = '#61ffca',
-			orange = '#ffca85',
-			pink = '#f694ff',
-			blue = '#82e2ff',
-			red = '#ff6767',
-			white = '#edecee',
-			gray = '#6d6d6d',
-			black = '#15141b',
-		}
+		local colors = require('config.colors')
 
 		-- Set highlight groups
 		vim.api.nvim_set_hl(0, 'TroubleNormal', { bg = colors.black })

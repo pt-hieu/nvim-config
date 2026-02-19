@@ -14,6 +14,11 @@ local M = {}
 local preview_timer = nil
 local PREVIEW_DEBOUNCE_MS = 300
 
+-- Module-level namespaces (created once, reused across renders)
+local ns_tree = vim.api.nvim_create_namespace('file-tree')
+local ns_cursor = vim.api.nvim_create_namespace('file-tree-cursor')
+local ns_preview = vim.api.nvim_create_namespace('file-tree-preview')
+
 local function debounced_preview()
 	if preview_timer then
 		vim.fn.timer_stop(preview_timer)
@@ -114,9 +119,9 @@ function M.show_inline_input(opts, callback)
 
 	-- Insert placeholder line in tree buffer to make space for input
 	local tree_buf = state.state.tree_buf
-	vim.api.nvim_buf_set_option(tree_buf, 'modifiable', true)
+	vim.bo[tree_buf].modifiable = true
 	vim.api.nvim_buf_set_lines(tree_buf, last_child_idx, last_child_idx, false, { '' })
-	vim.api.nvim_buf_set_option(tree_buf, 'modifiable', false)
+	vim.bo[tree_buf].modifiable = false
 
 	-- Calculate position relative to tree popup window
 	local tree_win = state.state.tree_popup.winid
@@ -142,9 +147,9 @@ function M.show_inline_input(opts, callback)
 	-- Cleanup function to remove placeholder line
 	local function cleanup()
 		if vim.api.nvim_buf_is_valid(tree_buf) then
-			vim.api.nvim_buf_set_option(tree_buf, 'modifiable', true)
+			vim.bo[tree_buf].modifiable = true
 			vim.api.nvim_buf_set_lines(tree_buf, last_child_idx, last_child_idx + 1, false, {})
-			vim.api.nvim_buf_set_option(tree_buf, 'modifiable', false)
+			vim.bo[tree_buf].modifiable = false
 		end
 	end
 
@@ -229,10 +234,10 @@ function M.create_and_show()
 	state.state.preview_buf = state.state.preview_popup.bufnr
 
 	-- Set buffer options
-	vim.api.nvim_buf_set_option(state.state.tree_buf, 'modifiable', false)
-	vim.api.nvim_buf_set_option(state.state.tree_buf, 'buftype', 'nofile')
-	vim.api.nvim_buf_set_option(state.state.preview_buf, 'modifiable', false)
-	vim.api.nvim_buf_set_option(state.state.preview_buf, 'buftype', 'nofile')
+	vim.bo[state.state.tree_buf].modifiable = false
+	vim.bo[state.state.tree_buf].buftype = 'nofile'
+	vim.bo[state.state.preview_buf].modifiable = false
+	vim.bo[state.state.preview_buf].buftype = 'nofile'
 
 	-- Set up keymaps
 	M.setup_keymaps()
@@ -422,22 +427,24 @@ function M.render_tree()
 			table.insert(highlights, {
 				line = line_idx,
 				col_start = git_start,
-				col_end = -1,
+				col_end = #line,
 				hl_group = git_hl,
 			})
 		end
 	end
 
 	-- Update buffer
-	vim.api.nvim_buf_set_option(state.state.tree_buf, 'modifiable', true)
+	vim.bo[state.state.tree_buf].modifiable = true
 	vim.api.nvim_buf_set_lines(state.state.tree_buf, 0, -1, false, lines)
-	vim.api.nvim_buf_set_option(state.state.tree_buf, 'modifiable', false)
+	vim.bo[state.state.tree_buf].modifiable = false
 
 	-- Apply highlights
-	local ns_id = vim.api.nvim_create_namespace('file-tree')
-	vim.api.nvim_buf_clear_namespace(state.state.tree_buf, ns_id, 0, -1)
+	vim.api.nvim_buf_clear_namespace(state.state.tree_buf, ns_tree, 0, -1)
 	for _, hl in ipairs(highlights) do
-		vim.api.nvim_buf_add_highlight(state.state.tree_buf, ns_id, hl.hl_group, hl.line, hl.col_start, hl.col_end)
+		vim.api.nvim_buf_set_extmark(state.state.tree_buf, ns_tree, hl.line, hl.col_start, {
+			end_col = hl.col_end,
+			hl_group = hl.hl_group,
+		})
 	end
 
 	-- Update cursor highlight
@@ -463,11 +470,12 @@ function M.sync_cursor_position()
 end
 
 function M.update_cursor_highlight()
-	local ns_id = vim.api.nvim_create_namespace('file-tree-cursor')
-	vim.api.nvim_buf_clear_namespace(state.state.tree_buf, ns_id, 0, -1)
+	vim.api.nvim_buf_clear_namespace(state.state.tree_buf, ns_cursor, 0, -1)
 
 	local line = state.state.current_idx - 1
-	vim.api.nvim_buf_add_highlight(state.state.tree_buf, ns_id, 'FileTreeSelection', line, 0, -1)
+	vim.api.nvim_buf_set_extmark(state.state.tree_buf, ns_cursor, line, 0, {
+		line_hl_group = 'FileTreeSelection',
+	})
 end
 
 function M.action_expand_or_open()
@@ -574,21 +582,26 @@ function M.preview_current()
 			children = { '(empty directory)' }
 		end
 
-		vim.api.nvim_buf_set_option(state.state.preview_buf, 'modifiable', true)
+		vim.bo[state.state.preview_buf].modifiable = true
 		vim.api.nvim_buf_set_lines(state.state.preview_buf, 0, -1, false, children)
-		vim.api.nvim_buf_set_option(state.state.preview_buf, 'modifiable', false)
-		vim.api.nvim_buf_set_option(state.state.preview_buf, 'filetype', '')
+		vim.bo[state.state.preview_buf].modifiable = false
+		vim.bo[state.state.preview_buf].filetype = ''
 
 		-- Apply highlights to folder preview
-		local ns_id = vim.api.nvim_create_namespace('file-tree-preview')
-		vim.api.nvim_buf_clear_namespace(state.state.preview_buf, ns_id, 0, -1)
+		vim.api.nvim_buf_clear_namespace(state.state.preview_buf, ns_preview, 0, -1)
 		for i, child in ipairs(children_nodes) do
 			local icon, icon_hl = icons.get_icon(child.name, child.type, false)
 			local name_hl = child.type == 'directory' and 'FileTreeFolder' or 'FileTreeFile'
 			-- Highlight icon
-			vim.api.nvim_buf_add_highlight(state.state.preview_buf, ns_id, icon_hl, i - 1, 0, #icon)
+			vim.api.nvim_buf_set_extmark(state.state.preview_buf, ns_preview, i - 1, 0, {
+				end_col = #icon,
+				hl_group = icon_hl,
+			})
 			-- Highlight name
-			vim.api.nvim_buf_add_highlight(state.state.preview_buf, ns_id, name_hl, i - 1, #icon + 1, -1)
+			vim.api.nvim_buf_set_extmark(state.state.preview_buf, ns_preview, i - 1, #icon + 1, {
+				end_col = #icon + 1 + #child.name,
+				hl_group = name_hl,
+			})
 		end
 	else
 		-- Preview file contents
@@ -604,10 +617,10 @@ function M.preview_file(path)
 
 	for _, bin_ext in ipairs(binary_extensions) do
 		if ext:lower() == bin_ext then
-			vim.api.nvim_buf_set_option(state.state.preview_buf, 'modifiable', true)
+			vim.bo[state.state.preview_buf].modifiable = true
 			vim.api.nvim_buf_set_lines(state.state.preview_buf, 0, -1, false, { '[Binary file]' })
-			vim.api.nvim_buf_set_option(state.state.preview_buf, 'modifiable', false)
-			vim.api.nvim_buf_set_option(state.state.preview_buf, 'filetype', '')
+			vim.bo[state.state.preview_buf].modifiable = false
+			vim.bo[state.state.preview_buf].filetype = ''
 			return
 		end
 	end
@@ -616,27 +629,32 @@ function M.preview_file(path)
 	local lines = {}
 	local file = io.open(path, 'r')
 	if file then
-		local count = 0
-		for line in file:lines() do
-			if count >= 200 then
-				table.insert(lines, '...')
-				break
+		local ok, read_err = pcall(function()
+			local count = 0
+			for line in file:lines() do
+				if count >= 200 then
+					table.insert(lines, '...')
+					break
+				end
+				table.insert(lines, line)
+				count = count + 1
 			end
-			table.insert(lines, line)
-			count = count + 1
-		end
+		end)
 		file:close()
+		if not ok then
+			lines = { '[Error reading file: ' .. tostring(read_err) .. ']' }
+		end
 	else
 		lines = { '[Cannot read file]' }
 	end
 
-	vim.api.nvim_buf_set_option(state.state.preview_buf, 'modifiable', true)
+	vim.bo[state.state.preview_buf].modifiable = true
 	vim.api.nvim_buf_set_lines(state.state.preview_buf, 0, -1, false, lines)
-	vim.api.nvim_buf_set_option(state.state.preview_buf, 'modifiable', false)
+	vim.bo[state.state.preview_buf].modifiable = false
 
 	-- Set filetype for syntax highlighting
 	local filetype = vim.filetype.match({ filename = path })
-	vim.api.nvim_buf_set_option(state.state.preview_buf, 'filetype', filetype or '')
+	vim.bo[state.state.preview_buf].filetype = filetype or ''
 end
 
 function M.close()

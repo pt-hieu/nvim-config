@@ -1,7 +1,5 @@
 local M = {}
 
-local state = require('file-tree.state')
-
 function M.get_status(root_path, callback)
 	local stdout = {}
 

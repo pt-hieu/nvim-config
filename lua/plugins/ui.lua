@@ -2,7 +2,7 @@ return {
 	-- Pending keybinds popup
 	{
 		'folke/which-key.nvim',
-		event = 'VimEnter',
+		event = 'VeryLazy',
 		opts = {
 			delay = 0,
 			icons = {
@@ -73,7 +73,7 @@ return {
 	-- Highlight TODO/FIXME/NOTE in comments
 	{
 		'folke/todo-comments.nvim',
-		event = 'VimEnter',
+		event = { 'BufReadPost', 'BufNewFile' },
 		dependencies = { 'nvim-lua/plenary.nvim' },
 		opts = { signs = false },
 	},
@@ -81,6 +81,7 @@ return {
 	-- Mini.nvim modules
 	{
 		'echasnovski/mini.nvim',
+		event = 'VeryLazy',
 		config = function()
 			-- Better text objects
 			require('mini.ai').setup({ n_lines = 500 })
@@ -109,8 +110,8 @@ return {
 				view = 'cmdline_popup',
 				format = {
 					cmdline = { icon = '>' },
-					search_down = { icon = '🔍⌄' },
-					search_up = { icon = '🔍⌃' },
+					search_down = { icon = ' ' },
+					search_up = { icon = ' ' },
 					filter = { icon = '$' },
 					lua = { icon = '☾' },
 					help = { icon = '?' },
@@ -132,8 +133,7 @@ return {
 				override = {
 					['vim.lsp.util.convert_input_to_markdown_lines'] = true,
 					['vim.lsp.util.stylize_markdown'] = true,
-					['cmp.entry.get_documentation'] = true,
-				},
+					},
 			},
 			presets = {
 				bottom_search = false,

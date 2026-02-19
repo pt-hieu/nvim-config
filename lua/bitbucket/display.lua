@@ -5,17 +5,7 @@ local M = {}
 local ns_id = vim.api.nvim_create_namespace('bitbucket_comments')
 local diff_ns_id = vim.api.nvim_create_namespace('bitbucket_diff')
 
--- Define signs for diff annotations
-local signs_defined = false
-local function define_diff_signs()
-  if signs_defined then
-    return
-  end
-  vim.fn.sign_define('BBDiffAdd', { text = '+', texthl = 'BBDiffAdd' })
-  vim.fn.sign_define('BBDiffChange', { text = '~', texthl = 'BBDiffChange' })
-  vim.fn.sign_define('BBDiffDelete', { text = '-', texthl = 'BBDiffDelete' })
-  signs_defined = true
-end
+-- No sign definitions needed: signs rendered via nvim_buf_set_extmark sign_text
 
 -- Format a single comment for display
 local function format_comment(comment)
@@ -165,11 +155,14 @@ local function render_line_comments(bufnr, line, comments)
       virt_lines = render_active_comment(formatted, indent)
     end
 
-    -- Create extmark with virtual lines below
-    local extmark_id = vim.api.nvim_buf_set_extmark(bufnr, ns_id, line - 1, 0, {
+    -- Create extmark with virtual lines below (pcall guards against out-of-range line)
+    local ok, extmark_id = pcall(vim.api.nvim_buf_set_extmark, bufnr, ns_id, line - 1, 0, {
       virt_lines = virt_lines,
       virt_lines_above = false,
     })
+    if not ok then
+      goto continue
+    end
 
     table.insert(extmark_ids, extmark_id)
 
@@ -406,8 +399,6 @@ function M.render_diff_signs(bufnr, callback)
       return
     end
 
-    define_diff_signs()
-
     get_file_diff(file_path, target_branch, function(err, hunks)
     if err or not hunks then
       if callback then
@@ -419,12 +410,14 @@ function M.render_diff_signs(bufnr, callback)
     -- Clear existing diff signs for this buffer
     M.clear_diff_signs(bufnr)
 
-    -- Place signs for added lines
+    local buf_line_count = vim.api.nvim_buf_line_count(bufnr)
+
+    -- Place signs for added lines using extmark sign_text
     for _, line in ipairs(hunks.added) do
-      if line <= vim.api.nvim_buf_line_count(bufnr) then
-        vim.fn.sign_place(0, 'BBDiffSigns', 'BBDiffAdd', bufnr, { lnum = line, priority = 5 })
-        -- Add line highlight
+      if line <= buf_line_count then
         vim.api.nvim_buf_set_extmark(bufnr, diff_ns_id, line - 1, 0, {
+          sign_text = '+',
+          sign_hl_group = 'BBDiffAdd',
           line_hl_group = 'BBDiffAddBg',
           priority = 5,
         })
@@ -433,8 +426,12 @@ function M.render_diff_signs(bufnr, callback)
 
     -- Place signs for deleted lines (show at next line)
     for _, line in ipairs(hunks.deleted) do
-      if line <= vim.api.nvim_buf_line_count(bufnr) and line > 0 then
-        vim.fn.sign_place(0, 'BBDiffSigns', 'BBDiffDelete', bufnr, { lnum = line, priority = 5 })
+      if line <= buf_line_count and line > 0 then
+        vim.api.nvim_buf_set_extmark(bufnr, diff_ns_id, line - 1, 0, {
+          sign_text = '-',
+          sign_hl_group = 'BBDiffDelete',
+          priority = 5,
+        })
       end
     end
 
@@ -447,7 +444,6 @@ end
 
 -- Clear diff signs for a buffer
 function M.clear_diff_signs(bufnr)
-  vim.fn.sign_unplace('BBDiffSigns', { buffer = bufnr })
   vim.api.nvim_buf_clear_namespace(bufnr, diff_ns_id, 0, -1)
 end
 
