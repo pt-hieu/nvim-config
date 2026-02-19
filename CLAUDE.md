@@ -13,7 +13,8 @@ Modular **Kickstart.nvim** based configuration optimized for maintainability. Co
     ├── config/
     │   ├── options.lua              # All vim.opt settings
     │   ├── keymaps.lua              # Core keymaps (non-plugin)
-    │   └── autocmds.lua             # Autocommands
+    │   ├── autocmds.lua             # Autocommands
+    │   └── colors.lua               # Shared Aura color palette
     ├── bitbucket/                   # Bitbucket PR comments (local plugin)
     │   ├── init.lua                 # Public API
     │   ├── api.lua                  # Bitbucket REST client
@@ -24,7 +25,7 @@ Modular **Kickstart.nvim** based configuration optimized for maintainability. Co
         ├── bitbucket.lua            # Bitbucket plugin spec
         ├── colorscheme.lua          # Aura theme
         ├── completion.lua           # Blink.cmp + LuaSnip
-        ├── editor.lua               # Neo-tree, autopairs, guess-indent
+        ├── editor.lua               # Yazi, autopairs, guess-indent, nvim-ts-autotag
         ├── formatting.lua           # Conform.nvim
         ├── git.lua                  # Gitsigns
         ├── lsp.lua                  # LSP + Mason + nvim-rulebook
@@ -83,11 +84,12 @@ Modular **Kickstart.nvim** based configuration optimized for maintainability. Co
   - Prioritizes files near current buffer + frequently edited files
   - Uses SQLite for history tracking
   - Replaces find_files/buffers/oldfiles with unified picker
-- **neo-tree.nvim** - File explorer (sidebar + float mode)
-  - Sidebar: `\`
-  - Float: `<leader>e`
-  - Shows dotfiles + gitignored files by default
-  - Lazy-loads on keypress
+- **file-tree** - Custom file explorer (local plugin, `lua/file-tree/`)
+  - Float mode only: `<leader>e`
+  - Split layout: tree (40%) + file preview (60%)
+  - CRUD: `a` create, `r` rename, `d` delete
+  - Filter: `/`, Grep in path: `f`
+  - Git status indicators (right-aligned)
 - **auto-session** - Automatic session management
   - Auto-saves on exit, auto-restores on startup (per directory)
   - Suppressed dirs: `~/`, `~/.config`, `/tmp`
@@ -114,7 +116,7 @@ Configured LSPs:
 
 ### Formatting (lua/plugins/formatting.lua)
 - **conform.nvim** - Format on save + manual format
-  - Key: `<M-w>` - Format buffer
+  - Key: `<M-\>` - Format buffer
   - Auto-formats on save (500ms timeout)
   - Configured formatters:
     - Lua: `stylua`
@@ -250,16 +252,24 @@ grt             - Go to type definition
 <leader>th      - Toggle inlay hints
 ```
 
-### Neo-tree (lua/plugins/editor.lua)
+### File Tree (lua/plugins/file-tree.lua)
 ```
-\               - Toggle file explorer (sidebar)
-<leader>e       - Open file explorer (float)
-<Esc> or \      - Close explorer (works in both modes)
+<leader>e       - Open file explorer (float, split layout)
+q / <Esc>       - Close explorer
+j/k             - Navigate
+l / <CR>        - Expand dir / open file
+h               - Collapse dir or go to parent
+a               - Create file or directory
+r               - Rename
+d               - Delete
+/               - Filter
+f               - Grep in path (opens telescope)
+<Tab>           - Switch to preview pane
 ```
 
 ### Format (lua/plugins/formatting.lua)
 ```
-<M-w>           - Format buffer (async)
+<M-\>           - Format buffer (async)
 ```
 
 ### Git History (lua/plugins/git-history.lua)
@@ -385,7 +395,7 @@ Run `:checkhealth` to verify setup and catch issues.
 | Formatters | `lua/plugins/formatting.lua` |
 | Treesitter langs | `lua/plugins/treesitter.lua` |
 | Theme | `lua/plugins/colorscheme.lua` |
-| File explorer | `lua/plugins/editor.lua` |
+| File explorer | `lua/plugins/file-tree.lua`, `lua/file-tree/` |
 | Search/fuzzy find | `lua/plugins/telescope.lua` |
 | Session management | `lua/plugins/session.lua` |
 | Git integration | `lua/plugins/git.lua` |
