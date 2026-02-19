@@ -9,6 +9,14 @@ local M = {}
 local debounce_timer = nil
 local DEBOUNCE_MS = 500
 
+local function stop_debounce()
+  if debounce_timer then
+    debounce_timer:stop()
+    debounce_timer:close()
+    debounce_timer = nil
+  end
+end
+
 -- Initialize PR detection (called once per session)
 local function init_pr(callback)
   if state.has_pr() then
@@ -105,10 +113,14 @@ local function load_buffer_comments(bufnr, callback)
     end
 
     -- Fetch comments
-    vim.notify('BB: Fetching comments...', vim.log.levels.INFO)
+    vim.schedule(function()
+      vim.notify('BB: Fetching comments...', vim.log.levels.INFO)
+    end)
     api.get_comments(pr.workspace, pr.repo, pr.id, function(err, comments)
       if err then
-        vim.notify('BB: ' .. err, vim.log.levels.ERROR)
+        vim.schedule(function()
+          vim.notify('BB: ' .. err, vim.log.levels.ERROR)
+        end)
         callback(err)
         return
       end
@@ -135,11 +147,20 @@ function M.enable()
       return
     end
 
+    -- Buffer may have been closed during async init
+    if not vim.api.nvim_buf_is_valid(bufnr) then
+      return
+    end
+
     if not state.has_pr() then
       return
     end
 
     load_buffer_comments(bufnr, function()
+      -- Buffer may have been closed during async comment fetch
+      if not vim.api.nvim_buf_is_valid(bufnr) then
+        return
+      end
       -- Also render diff signs even if file isn't in PR
       -- (comments will already render in load_buffer_comments)
       if state.is_review_mode() then
@@ -172,18 +193,28 @@ function M.refresh()
 
   init_pr(function(err)
     if err then
-      vim.notify('BB: ' .. err, vim.log.levels.ERROR)
+      vim.schedule(function()
+        vim.notify('BB: ' .. err, vim.log.levels.ERROR)
+      end)
+      return
+    end
+
+    if not vim.api.nvim_buf_is_valid(bufnr) then
       return
     end
 
     if not state.has_pr() then
-      vim.notify('BB: No PR found for current branch', vim.log.levels.INFO)
+      vim.schedule(function()
+        vim.notify('BB: No PR found for current branch', vim.log.levels.INFO)
+      end)
       return
     end
 
-    load_buffer_comments(bufnr, function(err)
-      if err then
-        vim.notify('BB: ' .. err, vim.log.levels.ERROR)
+    load_buffer_comments(bufnr, function(load_err)
+      if load_err then
+        vim.schedule(function()
+          vim.notify('BB: ' .. load_err, vim.log.levels.ERROR)
+        end)
       end
     end)
   end)
@@ -663,13 +694,18 @@ function M.on_buf_enter()
     return
   end
 
-  if debounce_timer then
-    debounce_timer:stop()
-  end
+  stop_debounce()
 
-  debounce_timer = vim.defer_fn(function()
+  local t = vim.uv.new_timer()
+  debounce_timer = t
+  t:start(DEBOUNCE_MS, 0, vim.schedule_wrap(function()
+    t:stop()
+    t:close()
+    if debounce_timer == t then
+      debounce_timer = nil
+    end
     M.enable()
-  end, DEBOUNCE_MS)
+  end))
 end
 
 -- Re-fetch comments after save (line numbers may have shifted)
@@ -704,13 +740,11 @@ function M.setup()
     end,
   })
 
-  -- Clear state when switching branches
-  vim.api.nvim_create_autocmd('User', {
+  -- Clean up stale state when buffers are closed (prevents memory leak)
+  vim.api.nvim_create_autocmd('BufWipeout', {
     group = group,
-    pattern = 'FugitiveChanged',
-    callback = function()
-      state.reset()
-      git.clear_cache()
+    callback = function(ev)
+      state.clear_buffer(ev.buf)
     end,
   })
 

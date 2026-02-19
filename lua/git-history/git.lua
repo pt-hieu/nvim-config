@@ -35,7 +35,8 @@ function M.get_file_history(file_path, callback)
     args = {
       'log',
       '--follow',
-      '--format=%H|%h|%an|%ar|%s',
+      '-n', '200',
+      '--format=%H\x1f%h\x1f%an\x1f%ar\x1f%s',
       '--',
       file_path,
     },
@@ -86,7 +87,7 @@ end
 function M.parse_commits(lines)
   local commits = {}
   for _, line in ipairs(lines) do
-    local parts = vim.split(line, '|', { plain = true })
+    local parts = vim.split(line, '\x1f', { plain = true })
     if #parts >= 5 then
       table.insert(commits, {
         full_hash = parts[1],

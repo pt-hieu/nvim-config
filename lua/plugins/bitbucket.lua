@@ -1,5 +1,5 @@
 return {
-  dir = vim.fn.stdpath('config'),
+  dir = vim.fn.stdpath('config') .. '/lua/bitbucket',
   name = 'bitbucket',
   dependencies = { 'nvim-lua/plenary.nvim', 'MunifTanjim/nui.nvim' },
   event = 'VeryLazy',

@@ -53,6 +53,9 @@ vim.o.confirm = true
 vim.o.title = true
 vim.o.titlestring = "%{fnamemodify(getcwd(), ':t')}"
 
+-- Scroll context
+vim.o.scrolloff = 10
+
 -- Tab settings
 vim.o.tabstop = 2
 vim.o.shiftwidth = 2
