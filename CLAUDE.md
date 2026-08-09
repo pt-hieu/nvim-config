@@ -403,6 +403,7 @@ Run `:checkhealth` to verify setup and catch issues.
 | Bitbucket PR comments | `lua/plugins/bitbucket.lua`, `lua/bitbucket/` |
 | Statusline | `lua/plugins/statusline.lua` |
 | UI/UX plugins | `lua/plugins/ui.lua` |
+| macOS default editor for `.md` (MacBook Air only) | `docs/macos-markdown-default-editor.md` |
 
 ## Summary
 Modular Kickstart config with:
