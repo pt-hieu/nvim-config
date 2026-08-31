@@ -30,6 +30,10 @@ return {
 			vim.api.nvim_set_hl(0, 'FileTreeIndent', { fg = '#4d4d4d' })
 			vim.api.nvim_set_hl(0, 'FileTreeRootName', { fg = '#a277ff', bold = true })
 
+			-- Inline name input (create/rename)
+			vim.api.nvim_set_hl(0, 'FileTreeInput', { fg = '#edecee', bg = '#3d375e' })
+			vim.api.nvim_set_hl(0, 'FileTreeInputIcon', { fg = '#a277ff', bg = '#3d375e' })
+
 			-- Preview highlight groups
 			vim.api.nvim_set_hl(0, 'FileTreePreviewBorder', { fg = '#61ffca' })
 

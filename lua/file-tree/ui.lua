@@ -149,18 +149,15 @@ function M.show_inline_input(opts, callback)
 	-- Row: screen row of the placeholder, offset by how far the tree is scrolled
 	local row = tree_pos[1] + (placeholder_lnum - topline)
 
-	-- Column: indented to match depth
-	local guide_width = 3 -- "│ " display width
-	local indent_width = depth * guide_width
-	local col = tree_pos[2] + indent_width
+	-- Span the whole pane so the input background reads as a full-width row,
+	-- like the selected row does. The indent lives in the prompt instead.
+	local col = tree_pos[2]
+	local input_width = tree_width
 
-	-- Icon prefix based on type
-	local icon = opts.is_directory and ' ' or ' '
-
-	local input_width = tree_width - indent_width - 4
-	if input_width < 20 then
-		input_width = 20
-	end
+	-- Exactly the prefix render_tree emits, so the typed name aligns with siblings
+	local icon = opts.is_directory and icons.folder_closed or icons.file_default
+	local prompt = row_prefix(icon, depth)
+	local guides_bytes = depth * INDENT_GUIDE_BYTES
 
 	-- Cleanup runs once, and only deletes the line while it is still our blank
 	-- placeholder. Input:unmount fires on_close on top of any explicit call, and
@@ -194,10 +191,10 @@ function M.show_inline_input(opts, callback)
 		size = { width = input_width },
 		border = 'none',
 		win_options = {
-			winhighlight = 'Normal:Normal',
+			winhighlight = 'Normal:FileTreeInput',
 		},
 	}, {
-		prompt = icon,
+		prompt = prompt,
 		default_value = opts.default or '',
 		on_submit = function(value)
 			cleanup()
@@ -210,6 +207,17 @@ function M.show_inline_input(opts, callback)
 	})
 
 	input:mount()
+
+	-- Colour the prompt to match the tree: dim guides, accented icon. Done with
+	-- extmarks because a NuiText prompt can only carry one highlight group.
+	vim.api.nvim_buf_set_extmark(input.bufnr, ns_tree, 0, 0, {
+		end_col = guides_bytes,
+		hl_group = 'FileTreeIndent',
+	})
+	vim.api.nvim_buf_set_extmark(input.bufnr, ns_tree, 0, guides_bytes, {
+		end_col = guides_bytes + #icon,
+		hl_group = 'FileTreeInputIcon',
+	})
 
 	-- unmount fires on_close, which cleans up and calls back
 	input:map('n', '<Esc>', function()
