@@ -162,12 +162,29 @@ function M.show_inline_input(opts, callback)
 		input_width = 20
 	end
 
-	-- Cleanup function to remove placeholder line
+	-- Cleanup runs once, and only deletes the line while it is still our blank
+	-- placeholder. Input:unmount fires on_close on top of any explicit call, and
+	-- the async git-status render can rewrite the whole buffer meanwhile.
+	local cleaned = false
 	local function cleanup()
-		if vim.api.nvim_buf_is_valid(tree_buf) then
+		if cleaned then
+			return
+		end
+		cleaned = true
+
+		if not vim.api.nvim_buf_is_valid(tree_buf) then
+			return
+		end
+
+		local placeholder = vim.api.nvim_buf_get_lines(tree_buf, last_child_idx, last_child_idx + 1, false)[1]
+		if placeholder == '' then
 			vim.bo[tree_buf].modifiable = true
 			vim.api.nvim_buf_set_lines(tree_buf, last_child_idx, last_child_idx + 1, false, {})
 			vim.bo[tree_buf].modifiable = false
+		end
+
+		if state.state.tree_popup then
+			M.sync_cursor_position()
 		end
 	end
 
@@ -194,10 +211,9 @@ function M.show_inline_input(opts, callback)
 
 	input:mount()
 
+	-- unmount fires on_close, which cleans up and calls back
 	input:map('n', '<Esc>', function()
 		input:unmount()
-		cleanup()
-		callback(nil)
 	end, { noremap = true })
 end
 
