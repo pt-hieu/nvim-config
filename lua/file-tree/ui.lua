@@ -115,9 +115,9 @@ function M.show_input(opts, callback)
 
 	input:mount()
 
+	-- unmount fires on_close, which calls back
 	input:map('n', '<Esc>', function()
 		input:unmount()
-		callback(nil)
 	end, { noremap = true })
 end
 
