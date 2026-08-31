@@ -130,17 +130,24 @@ function M.show_inline_input(opts, callback)
 
 	-- Insert placeholder line in tree buffer to make space for input
 	local tree_buf = state.state.tree_buf
+	local tree_win = state.state.tree_popup.winid
 	vim.bo[tree_buf].modifiable = true
 	vim.api.nvim_buf_set_lines(tree_buf, last_child_idx, last_child_idx, false, { '' })
 	vim.bo[tree_buf].modifiable = false
 
+	-- Park the tree cursor on the placeholder so Neovim scrolls it into view.
+	-- Without this the topline read below is stale, and a placeholder deep in a
+	-- long tree puts the input off-screen.
+	local placeholder_lnum = last_child_idx + 1
+	vim.api.nvim_win_set_cursor(tree_win, { placeholder_lnum, 0 })
+
 	-- Calculate position relative to tree popup window
-	local tree_win = state.state.tree_popup.winid
 	local tree_pos = vim.api.nvim_win_get_position(tree_win)
 	local tree_width = vim.api.nvim_win_get_width(tree_win)
+	local topline = vim.fn.line('w0', tree_win)
 
-	-- Row: at the placeholder line we just inserted
-	local row = tree_pos[1] + last_child_idx -- placeholder is at this row
+	-- Row: screen row of the placeholder, offset by how far the tree is scrolled
+	local row = tree_pos[1] + (placeholder_lnum - topline)
 
 	-- Column: indented to match depth
 	local guide_width = 3 -- "│ " display width
