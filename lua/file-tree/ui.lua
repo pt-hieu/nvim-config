@@ -19,6 +19,17 @@ local ns_tree = vim.api.nvim_create_namespace('file-tree')
 local ns_cursor = vim.api.nvim_create_namespace('file-tree-cursor')
 local ns_preview = vim.api.nvim_create_namespace('file-tree-preview')
 
+-- Every tree row is "<guides><icon> <name>".
+local INDENT_GUIDE = '│ '
+local NAME_GAP = ' '
+
+-- Byte length, not display width: extmark columns are byte offsets.
+local INDENT_GUIDE_BYTES = #INDENT_GUIDE
+
+local function row_prefix(icon, depth)
+	return string.rep(INDENT_GUIDE, depth) .. icon .. NAME_GAP
+end
+
 local function debounced_preview()
 	if preview_timer then
 		vim.fn.timer_stop(preview_timer)
@@ -344,21 +355,16 @@ function M.render_tree()
 	local lines = {}
 	local highlights = {}
 
-	-- Indent guide character
-	local guide = '│ '
-	local guide_len = #guide
-
 	-- Get window width for full-width lines
 	local win_width = vim.api.nvim_win_get_width(state.state.tree_popup.winid) - 2
 
 	for i, node in ipairs(state.state.visible_lines) do
 		local line_idx = i - 1
-		local indent = string.rep(guide, node.depth)
 		local is_expanded = state.is_expanded(node.path)
 		local icon, icon_hl = icons.get_icon(node.name, node.type, is_expanded)
 
 		-- Build content (indent + icon + name)
-		local content = indent .. icon .. ' ' .. node.name
+		local content = row_prefix(icon, node.depth) .. node.name
 		local content_len = vim.fn.strdisplaywidth(content)
 
 		-- Add git status indicator (right-aligned)
@@ -388,17 +394,17 @@ function M.render_tree()
 
 		-- Highlight each indent guide
 		for d = 0, node.depth - 1 do
-			local col_start = d * guide_len
+			local col_start = d * INDENT_GUIDE_BYTES
 			table.insert(highlights, {
 				line = line_idx,
 				col_start = col_start,
-				col_end = col_start + guide_len,
+				col_end = col_start + INDENT_GUIDE_BYTES,
 				hl_group = 'FileTreeIndent',
 			})
 		end
 
 		-- Highlight icon
-		local icon_start = node.depth * guide_len
+		local icon_start = node.depth * INDENT_GUIDE_BYTES
 		local icon_end = icon_start + #icon
 		table.insert(highlights, {
 			line = line_idx,
