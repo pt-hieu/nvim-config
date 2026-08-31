@@ -5,24 +5,6 @@ return {
 		local conditions = require('heirline.conditions')
 		local utils = require('heirline.utils')
 
-		-- Cached optional module references (loaded once on first use)
-		local _llm_ghost = nil
-		local _bb_state = nil
-		local function get_llm_ghost()
-			if _llm_ghost == nil then
-				local ok, m = pcall(require, 'llm-ghost')
-				_llm_ghost = ok and m or false
-			end
-			return _llm_ghost ~= false and _llm_ghost or nil
-		end
-		local function get_bb_state()
-			if _bb_state == nil then
-				local ok, m = pcall(require, 'bitbucket.state')
-				_bb_state = ok and m or false
-			end
-			return _bb_state ~= false and _bb_state or nil
-		end
-
 		-- Aura theme colors
 		local colors = vim.tbl_extend('force', require('config.colors'), { fg = '#edecee' })
 
@@ -169,50 +151,6 @@ return {
 						end,
 						hl = { fg = colors.green, bg = colors.black },
 					},
-				},
-
-				-- LLM Ghost server status
-				{
-					provider = ' 󱙺 ',
-					hl = function()
-						local ghost = get_llm_ghost()
-						local connected = ghost and ghost.is_server_ok()
-						return { fg = connected and colors.purple or colors.red, bg = colors.black }
-					end,
-				},
-
-				-- Bitbucket PR status (shows review mode when active)
-				{
-					provider = function()
-						local bb_state = get_bb_state()
-						if not bb_state then
-							return ' 󰊢 '
-						end
-						local has_pr = bb_state.has_pr()
-						local review_mode = bb_state.is_review_mode()
-						if review_mode then
-							return ' 󰊢 R '
-						elseif has_pr then
-							return ' 󰊢 '
-						else
-							return ' 󰊢 '
-						end
-					end,
-					hl = function()
-						local bb_state = get_bb_state()
-						if not bb_state then
-							return { fg = colors.gray, bg = colors.black }
-						end
-						local review_mode = bb_state.is_review_mode()
-						local has_pr = bb_state.has_pr()
-						if review_mode then
-							return { fg = colors.purple, bg = colors.black, bold = true }
-						elseif has_pr then
-							return { fg = colors.green, bg = colors.black }
-						else
-							return { fg = colors.gray, bg = colors.black }
-						end
-					end,
 				},
 
 				-- Filename (fills available space)

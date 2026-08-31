@@ -15,14 +15,7 @@ Modular **Kickstart.nvim** based configuration optimized for maintainability. Co
     │   ├── keymaps.lua              # Core keymaps (non-plugin)
     │   ├── autocmds.lua             # Autocommands
     │   └── colors.lua               # Shared Aura color palette
-    ├── bitbucket/                   # Bitbucket PR comments (local plugin)
-    │   ├── init.lua                 # Public API
-    │   ├── api.lua                  # Bitbucket REST client
-    │   ├── git.lua                  # Git utilities
-    │   ├── state.lua                # Buffer state management
-    │   └── display.lua              # Virtual text rendering
     └── plugins/
-        ├── bitbucket.lua            # Bitbucket plugin spec
         ├── colorscheme.lua          # Aura theme
         ├── completion.lua           # Blink.cmp + LuaSnip
         ├── editor.lua               # Yazi, autopairs, guess-indent, nvim-ts-autotag
@@ -136,26 +129,12 @@ Configured LSPs:
   - Keymap: `<leader>gh`
   - Close: `q` or `Esc`
 
-### Bitbucket Integration (lua/plugins/bitbucket.lua, lua/bitbucket/)
-- **bitbucket** - Custom PR comments display (local plugin)
-  - Display PR comments as virtual text inline in buffers
-  - Auto-detects PR from current git branch
-  - Shows line-level and file-level comments
-  - Aura theme styling with bordered comment boxes
-  - Auto-loads on BufEnter with 500ms debounce
-  - Statusline indicator: 󰊢 (gray=no PR, green=PR detected)
-  - Keymaps: `<leader>bc` (toggle), `<leader>br` (refresh)
-  - Commands: `:BBComments`, `:BBRefresh`
-  - Requires env vars: `BITBUCKET_USERNAME`, `BITBUCKET_TOKEN`
-
 ### Statusline (lua/plugins/statusline.lua)
 - **heirline.nvim** - Highly customizable statusline built from scratch
   - Components (left to right):
     - Mode (color-coded: purple=normal, green=insert, pink=visual, etc.)
     - Git diff (+added ~changed -removed) from gitsigns
     - Diagnostics (󰅚 errors, 󰀪 warnings, 󰋽 info, 󰌶 hints)
-    - LLM Ghost status (󱙺 purple=connected, red=disconnected)
-    - Bitbucket PR status (󰊢 gray=no PR, green=PR detected)
     - Filename (with modified ● indicator)
     - LSP clients (blue background)
     - Filetype (green background)
@@ -285,12 +264,6 @@ q/<Esc>         - Close window (from either pane)
 <C-w>w          - Standard Vim window navigation
 ```
 
-### Bitbucket (lua/plugins/bitbucket.lua)
-```
-<leader>bc      - Toggle PR comments visibility
-<leader>br      - Refresh PR comments from API
-```
-
 ## LSP Configuration (lua/plugins/lsp.lua)
 
 ### Capabilities
@@ -400,7 +373,6 @@ Run `:checkhealth` to verify setup and catch issues.
 | Session management | `lua/plugins/session.lua` |
 | Git integration | `lua/plugins/git.lua` |
 | Git history inspector | `lua/plugins/git-history.lua`, `lua/git-history/` |
-| Bitbucket PR comments | `lua/plugins/bitbucket.lua`, `lua/bitbucket/` |
 | Statusline | `lua/plugins/statusline.lua` |
 | UI/UX plugins | `lua/plugins/ui.lua` |
 | macOS default editor for `.md` (MacBook Air only) | `docs/macos-markdown-default-editor.md` |
@@ -414,7 +386,6 @@ Modular Kickstart config with:
 - Neo-tree (sidebar + float mode, lazy-loaded)
 - Transparent Aura dark theme
 - Git integration (gitsigns, git-history)
-- Bitbucket PR comments inline display
 - Custom heirline statusline with Aura colors
 - Format on save (conform.nvim)
 - ESLint disable comments (nvim-rulebook)
