@@ -14,6 +14,13 @@ local M = {}
 local preview_timer = nil
 local PREVIEW_DEBOUNCE_MS = 300
 
+-- Layout: tree takes a quarter of the row, but never so little that deeply
+-- nested names get truncated, so it is floored at MIN_TREE_WIDTH columns.
+local LAYOUT_WIDTH_RATIO = 0.9
+local LAYOUT_HEIGHT_RATIO = 0.8
+local TREE_WIDTH_RATIO = 0.25
+local MIN_TREE_WIDTH = 30
+
 -- Module-level namespaces (created once, reused across renders)
 local ns_tree = vim.api.nvim_create_namespace('file-tree')
 local ns_cursor = vim.api.nvim_create_namespace('file-tree-cursor')
@@ -253,18 +260,23 @@ function M.create_and_show()
 		},
 	})
 
-	-- Create layout (40% tree, 60% preview)
+	-- Create layout (1:4 tree to preview, tree floored at MIN_TREE_WIDTH)
+	local layout_width = math.floor(vim.o.columns * LAYOUT_WIDTH_RATIO)
+	local tree_width = math.max(MIN_TREE_WIDTH, math.floor(layout_width * TREE_WIDTH_RATIO))
+	tree_width = math.min(tree_width, layout_width - 1)
+	local preview_width = layout_width - tree_width
+
 	state.state.layout = Layout(
 		{
 			position = '50%',
 			size = {
-				width = '90%',
-				height = '80%',
+				width = layout_width,
+				height = math.floor(vim.o.lines * LAYOUT_HEIGHT_RATIO),
 			},
 		},
 		Layout.Box({
-			Layout.Box(state.state.tree_popup, { size = '40%' }),
-			Layout.Box(state.state.preview_popup, { size = '60%' }),
+			Layout.Box(state.state.tree_popup, { size = { width = tree_width } }),
+			Layout.Box(state.state.preview_popup, { size = { width = preview_width } }),
 		}, { dir = 'row' })
 	)
 
