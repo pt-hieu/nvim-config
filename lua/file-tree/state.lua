@@ -7,6 +7,7 @@ M.state = {
 	current_idx = 1,
 	expanded_paths = {},
 	git_status = {},
+	git_ignored = {},
 	filter_text = '',
 	filter_mode = false,
 	filter_input = nil,
@@ -24,6 +25,7 @@ function M.init_state(root)
 	M.state.current_idx = 1
 	M.state.expanded_paths = { [root] = true }
 	M.state.git_status = {}
+	M.state.git_ignored = {}
 	M.state.filter_text = ''
 	M.state.filter_mode = false
 	M.state.filter_input = nil
@@ -85,6 +87,7 @@ function M.reset_state()
 		current_idx = 1,
 		expanded_paths = {},
 		git_status = {},
+		git_ignored = {},
 		filter_text = '',
 		filter_mode = false,
 		filter_input = nil,

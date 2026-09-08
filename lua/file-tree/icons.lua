@@ -40,7 +40,6 @@ local git_indicators = {
 	staged = { icon = '✓', hl = 'FileTreeGitStaged' },
 	staged_modified = { icon = '●', hl = 'FileTreeGitStaged' },
 	untracked = { icon = '?', hl = 'FileTreeGitUntracked' },
-	ignored = { icon = '◌', hl = 'FileTreeGitIgnored' },
 	dirty = { icon = '●', hl = 'FileTreeGitDirty' },
 }
 

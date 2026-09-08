@@ -39,9 +39,10 @@ function M.open()
 	end
 
 	-- Fetch git status async and re-render when done
-	git.get_status(root, function(status_map)
+	git.get_status(root, function(status_map, ignored_paths)
 		vim.schedule(function()
 			state.state.git_status = status_map
+			state.state.git_ignored = ignored_paths
 			-- Only re-render if UI is still open
 			if state.state.tree_buf and vim.api.nvim_buf_is_valid(state.state.tree_buf) then
 				ui.render_tree()

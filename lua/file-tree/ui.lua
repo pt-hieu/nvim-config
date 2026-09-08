@@ -7,6 +7,7 @@ local tree_mod = require('file-tree.tree')
 local icons = require('file-tree.icons')
 local fs = require('file-tree.fs')
 local filter = require('file-tree.filter')
+local git = require('file-tree.git')
 
 local M = {}
 
@@ -405,6 +406,10 @@ function M.render_tree()
 		local line_idx = i - 1
 		local is_expanded = state.is_expanded(node.path)
 		local icon, icon_hl = icons.get_icon(node.name, node.type, is_expanded)
+		local is_ignored = git.is_ignored(node.path, state.state.git_ignored)
+		if is_ignored then
+			icon_hl = 'FileTreeGitIgnored'
+		end
 
 		-- Build content (indent + icon + name)
 		local content = row_prefix(icon, node.depth) .. node.name
@@ -460,6 +465,9 @@ function M.render_tree()
 		local name_start = icon_end + 1
 		local name_end = name_start + #node.name
 		local name_hl = node.type == 'directory' and 'FileTreeFolder' or 'FileTreeFile'
+		if is_ignored then
+			name_hl = 'FileTreeGitIgnored'
+		end
 		if node.is_root then
 			name_hl = 'FileTreeRootName'
 		end
@@ -641,6 +649,10 @@ function M.preview_current()
 		for i, child in ipairs(children_nodes) do
 			local icon, icon_hl = icons.get_icon(child.name, child.type, false)
 			local name_hl = child.type == 'directory' and 'FileTreeFolder' or 'FileTreeFile'
+			if git.is_ignored(child.path, state.state.git_ignored) then
+				icon_hl = 'FileTreeGitIgnored'
+				name_hl = 'FileTreeGitIgnored'
+			end
 			-- Highlight icon
 			vim.api.nvim_buf_set_extmark(state.state.preview_buf, ns_preview, i - 1, 0, {
 				end_col = #icon,
@@ -718,7 +730,6 @@ end
 
 function M.refresh_tree()
 	local tree_builder = require('file-tree.tree')
-	local git = require('file-tree.git')
 
 	-- Rebuild tree
 	state.state.tree = tree_builder.build_tree(state.state.root)
@@ -727,9 +738,10 @@ function M.refresh_tree()
 	M.render_tree()
 
 	-- Refresh git status
-	git.get_status(state.state.root, function(status_map)
+	git.get_status(state.state.root, function(status_map, ignored_paths)
 		vim.schedule(function()
 			state.state.git_status = status_map
+			state.state.git_ignored = ignored_paths
 			if state.state.tree_buf and vim.api.nvim_buf_is_valid(state.state.tree_buf) then
 				M.render_tree()
 			end

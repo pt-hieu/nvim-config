@@ -41,7 +41,7 @@ return {
 			vim.api.nvim_set_hl(0, 'FileTreeGitModified', { fg = '#a277ff' })
 			vim.api.nvim_set_hl(0, 'FileTreeGitStaged', { fg = '#61ffca' })
 			vim.api.nvim_set_hl(0, 'FileTreeGitUntracked', { fg = '#6d6d6d' })
-			vim.api.nvim_set_hl(0, 'FileTreeGitIgnored', { fg = '#4d4d4d' })
+			vim.api.nvim_set_hl(0, 'FileTreeGitIgnored', { fg = '#6d6d6d' })
 			vim.api.nvim_set_hl(0, 'FileTreeGitDirty', { fg = '#ffca85' })
 		end,
 	},
