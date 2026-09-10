@@ -29,6 +29,14 @@ return {
 		vim.api.nvim_set_hl(0, 'TelescopeResultsBorder', { fg = colors.purple })
 		vim.api.nvim_set_hl(0, 'TelescopePreviewBorder', { fg = colors.purple })
 
+		-- Match the file-tree module: the results list takes a quarter of the row,
+		-- but never so little that paths get truncated, so it is floored at 30 columns.
+		local MIN_RESULTS_WIDTH = 30
+		local function preview_width(_, columns)
+			local results_width = math.max(MIN_RESULTS_WIDTH, math.floor(columns * 0.25))
+			return columns - math.min(results_width, columns - 1)
+		end
+
 		local ignore_patterns = {
 			'node_modules',
 			'.git/',
@@ -57,6 +65,14 @@ return {
 			pickers = {
 				find_files = { file_ignore_patterns = ignore_patterns },
 				live_grep = { file_ignore_patterns = ignore_patterns },
+				git_status = {
+					layout_strategy = 'horizontal',
+					layout_config = {
+						width = 0.9,
+						height = 0.8,
+						preview_width = preview_width,
+					},
+				},
 			},
 			extensions = {
 				['ui-select'] = {
