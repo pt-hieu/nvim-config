@@ -5,6 +5,13 @@ local git = require('git-history.git')
 
 local M = {}
 
+-- Layout: the commit list takes a quarter of the row, but never so little that
+-- hashes and dates get truncated, so it is floored at MIN_COMMIT_WIDTH columns.
+local LAYOUT_WIDTH_RATIO = 0.9
+local LAYOUT_HEIGHT_RATIO = 0.8
+local COMMIT_WIDTH_RATIO = 0.25
+local MIN_COMMIT_WIDTH = 30
+
 -- Module-level namespaces (created once, reused across renders)
 local ns_commits = vim.api.nvim_create_namespace('git-history')
 local ns_cursor = vim.api.nvim_create_namespace('git-history-cursor')
@@ -35,18 +42,23 @@ function M.create_and_show()
     },
   })
 
-  -- Create layout
+  -- Create layout (1:4 commits to preview, commits floored at MIN_COMMIT_WIDTH)
+  local layout_width = math.floor(vim.o.columns * LAYOUT_WIDTH_RATIO)
+  local commit_width = math.max(MIN_COMMIT_WIDTH, math.floor(layout_width * COMMIT_WIDTH_RATIO))
+  commit_width = math.min(commit_width, layout_width - 1)
+  local preview_width = layout_width - commit_width
+
   state.state.layout = Layout(
     {
       position = '50%',
       size = {
-        width = '90%',
-        height = '80%',
+        width = layout_width,
+        height = math.floor(vim.o.lines * LAYOUT_HEIGHT_RATIO),
       },
     },
     Layout.Box({
-      Layout.Box(state.state.commit_popup, { size = '40%' }),
-      Layout.Box(state.state.preview_popup, { size = '60%' }),
+      Layout.Box(state.state.commit_popup, { size = { width = commit_width } }),
+      Layout.Box(state.state.preview_popup, { size = { width = preview_width } }),
     }, { dir = 'row' })
   )
 
