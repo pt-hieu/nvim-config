@@ -259,6 +259,9 @@ function M.create_and_show()
 				top_align = 'center',
 			},
 		},
+		win_options = {
+			wrap = true,
+		},
 	})
 
 	-- Create layout (1:4 tree to preview, tree floored at MIN_TREE_WIDTH)
@@ -617,6 +620,7 @@ function M.preview_current()
 	if node.type == 'directory' then
 		-- Show directory info
 		state.state.preview_popup.border:set_text('top', '  ' .. node.name .. '/ ', 'center')
+		vim.wo[state.state.preview_popup.winid].number = false
 
 		local children_nodes = {}
 		local children = {}
@@ -667,6 +671,7 @@ function M.preview_current()
 	else
 		-- Preview file contents
 		state.state.preview_popup.border:set_text('top', '  ' .. node.name .. ' ', 'center')
+		vim.wo[state.state.preview_popup.winid].number = true
 		M.preview_file(node.path)
 	end
 end
