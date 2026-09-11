@@ -85,6 +85,22 @@ return {
 			},
 		})
 
+		-- Telescope forces wrap off whenever it creates a preview window, so the
+		-- git status diff gets wrap and line numbers after each preview loads.
+		vim.api.nvim_create_autocmd('User', {
+			pattern = 'TelescopePreviewerLoaded',
+			callback = function()
+				local action_state = require('telescope.actions.state')
+				for _, prompt_bufnr in ipairs(require('telescope.state').get_existing_prompt_bufnrs()) do
+					local picker = action_state.get_current_picker(prompt_bufnr)
+					if picker and picker.prompt_title == 'Git Status' then
+						vim.wo.wrap = true
+						vim.wo.number = true
+					end
+				end
+			end,
+		})
+
 		-- Load extensions
 		pcall(require('telescope').load_extension, 'fzf')
 		pcall(require('telescope').load_extension, 'ui-select')
