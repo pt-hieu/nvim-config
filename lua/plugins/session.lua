@@ -7,7 +7,7 @@ return {
 		auto_restore = true,
 		suppressed_dirs = { '~/', '~/.config', '/tmp' },
 		session_lens = {
-			load_on_setup = true,
+			load_on_setup = false,
 			theme_conf = { border = true },
 			previewer = false,
 		},

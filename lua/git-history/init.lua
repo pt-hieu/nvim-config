@@ -10,51 +10,26 @@ function M.open()
     return
   end
 
-  -- Check if in git repo
-  local git = require('git-history.git')
-  git.get_git_root(function(err, root)
-    if err then
-      vim.schedule(function()
-        vim.notify('Not in a git repository', vim.log.levels.WARN)
-      end)
-      return
-    end
+  -- Open the UI immediately with a loading placeholder, then fill it in
+  local state = require('git-history.state')
+  local ui = require('git-history.ui')
+  state.init_state(current_buf, file_path)
+  ui.create_and_show()
+  local s = state.state
 
-    -- Get relative path
-    git.get_relative_path(file_path, function(err, rel_path)
-      if err then
-        vim.schedule(function()
-          vim.notify('Could not determine file path', vim.log.levels.ERROR)
-        end)
+  require('git-history.git').get_repo_info(file_path, function(err, root, rel_path)
+    vim.schedule(function()
+      if state.state ~= s then
         return
       end
-
-      -- Fetch commit history
-      git.get_file_history(rel_path, function(err, commits)
-        if err then
-          vim.schedule(function()
-            vim.notify('Error fetching git history: ' .. err, vim.log.levels.ERROR)
-          end)
-          return
-        end
-
-        if #commits == 0 then
-          vim.schedule(function()
-            vim.notify('No commits found for this file', vim.log.levels.INFO)
-          end)
-          return
-        end
-
-        -- Initialize state and create UI (must be scheduled to avoid fast event context)
-        vim.schedule(function()
-          local state = require('git-history.state')
-          state.init_state(current_buf, rel_path, commits)
-
-          -- Create and show UI
-          local ui = require('git-history.ui')
-          ui.create_and_show()
-        end)
-      end)
+      if err then
+        ui.close()
+        vim.notify('Not in a git repository', vim.log.levels.WARN)
+        return
+      end
+      s.git_root = root
+      s.file_path = rel_path
+      ui.load_more()
     end)
   end)
 end

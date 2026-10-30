@@ -15,6 +15,17 @@ local M = {}
 local preview_timer = nil
 local PREVIEW_DEBOUNCE_MS = 300
 
+-- Debounce timer for re-rendering while typing in the filter
+local filter_timer = nil
+local FILTER_DEBOUNCE_MS = 60
+
+-- Preview limits: file previews read at most this many bytes and lines.
+local PREVIEW_MAX_BYTES = 64 * 1024
+local PREVIEW_MAX_LINES = 200
+
+-- Bumped per git status request so superseded results can be dropped.
+local git_request_id = 0
+
 -- Layout: tree takes a quarter of the row, but never so little that deeply
 -- nested names get truncated, so it is floored at MIN_TREE_WIDTH columns.
 local LAYOUT_WIDTH_RATIO = 0.9
@@ -34,6 +45,9 @@ local NAME_GAP = ' '
 -- Byte length, not display width: extmark columns are byte offsets.
 local INDENT_GUIDE_BYTES = #INDENT_GUIDE
 
+-- Empty columns between the git indicator and the right edge of the window.
+local GIT_INDICATOR_MARGIN = '   '
+
 local function row_prefix(icon, depth)
 	return string.rep(INDENT_GUIDE, depth) .. icon .. NAME_GAP
 end
@@ -45,6 +59,26 @@ local function debounced_preview()
 	preview_timer = vim.fn.timer_start(PREVIEW_DEBOUNCE_MS, function()
 		vim.schedule(function()
 			M.preview_current()
+		end)
+	end)
+end
+
+local function cancel_filter_timer()
+	if filter_timer then
+		vim.fn.timer_stop(filter_timer)
+		filter_timer = nil
+	end
+end
+
+local function debounced_filter()
+	cancel_filter_timer()
+	filter_timer = vim.fn.timer_start(FILTER_DEBOUNCE_MS, function()
+		filter_timer = nil
+		-- Schedule to avoid E565 error during text input
+		vim.schedule(function()
+			if state.state.tree_buf and vim.api.nvim_buf_is_valid(state.state.tree_buf) then
+				M.apply_filter()
+			end
 		end)
 	end)
 end
@@ -300,11 +334,8 @@ function M.create_and_show()
 	-- Set up keymaps
 	M.setup_keymaps()
 
-	-- Render tree
+	-- Render tree; the caller previews once the selection is final
 	M.render_tree()
-
-	-- Preview first item if it's a file
-	M.preview_current()
 end
 
 function M.setup_keymaps()
@@ -399,11 +430,11 @@ function M.render_tree()
 		state.state.visible_lines = all_lines
 	end
 
+	-- A filter can leave fewer rows than the selection index
+	state.state.current_idx = math.max(math.min(state.state.current_idx, #state.state.visible_lines), 1)
+
 	local lines = {}
 	local highlights = {}
-
-	-- Get window width for full-width lines
-	local win_width = vim.api.nvim_win_get_width(state.state.tree_popup.winid) - 2
 
 	for i, node in ipairs(state.state.visible_lines) do
 		local line_idx = i - 1
@@ -415,31 +446,11 @@ function M.render_tree()
 		end
 
 		-- Build content (indent + icon + name)
-		local content = row_prefix(icon, node.depth) .. node.name
-		local content_len = vim.fn.strdisplaywidth(content)
+		local line = row_prefix(icon, node.depth) .. node.name
 
-		-- Add git status indicator (right-aligned)
+		-- Git status indicator (drawn right-aligned as virtual text)
 		local git_status = state.state.git_status[node.path]
 		local git_icon, git_hl = icons.get_git_indicator(git_status)
-
-		local line
-		if git_icon then
-			local git_len = vim.fn.strdisplaywidth(git_icon)
-			local padding = win_width - content_len - git_len - 1
-			if padding > 0 then
-				line = content .. string.rep(' ', padding) .. git_icon
-			else
-				line = content .. ' ' .. git_icon
-			end
-		else
-			-- Pad to full width for consistent selection highlight
-			local padding = win_width - content_len
-			if padding > 0 then
-				line = content .. string.rep(' ', padding)
-			else
-				line = content
-			end
-		end
 
 		table.insert(lines, line)
 
@@ -481,14 +492,12 @@ function M.render_tree()
 			hl_group = name_hl,
 		})
 
-		-- Highlight git indicator (at end of line)
+		-- Git indicator, kept clear of the right edge
 		if git_icon and git_hl then
-			local git_start = #line - #git_icon
 			table.insert(highlights, {
 				line = line_idx,
-				col_start = git_start,
-				col_end = #line,
-				hl_group = git_hl,
+				col_start = #line,
+				virt_text = { { git_icon, git_hl }, { GIT_INDICATOR_MARGIN } },
 			})
 		end
 	end
@@ -501,10 +510,17 @@ function M.render_tree()
 	-- Apply highlights
 	vim.api.nvim_buf_clear_namespace(state.state.tree_buf, ns_tree, 0, -1)
 	for _, hl in ipairs(highlights) do
-		vim.api.nvim_buf_set_extmark(state.state.tree_buf, ns_tree, hl.line, hl.col_start, {
-			end_col = hl.col_end,
-			hl_group = hl.hl_group,
-		})
+		if hl.virt_text then
+			vim.api.nvim_buf_set_extmark(state.state.tree_buf, ns_tree, hl.line, hl.col_start, {
+				virt_text = hl.virt_text,
+				virt_text_pos = 'right_align',
+			})
+		else
+			vim.api.nvim_buf_set_extmark(state.state.tree_buf, ns_tree, hl.line, hl.col_start, {
+				end_col = hl.col_end,
+				hl_group = hl.hl_group,
+			})
+		end
 	end
 
 	-- Update cursor highlight
@@ -634,6 +650,12 @@ function M.preview_current()
 			end
 		end
 
+		-- Only as many entries as the window can show
+		local max_entries = math.max(vim.api.nvim_win_get_height(state.state.preview_popup.winid), 1)
+		if #children_nodes > max_entries then
+			children_nodes = vim.list_slice(children_nodes, 1, max_entries)
+		end
+
 		for _, child in ipairs(children_nodes) do
 			local icon, _ = icons.get_icon(child.name, child.type, false)
 			table.insert(children, icon .. ' ' .. child.name)
@@ -691,19 +713,28 @@ function M.preview_file(path)
 		end
 	end
 
-	-- Read file contents (first 200 lines)
+	-- Read the start of the file (at most PREVIEW_MAX_BYTES, PREVIEW_MAX_LINES lines)
 	local lines = {}
 	local file = io.open(path, 'r')
 	if file then
 		local ok, read_err = pcall(function()
-			local count = 0
-			for line in file:lines() do
-				if count >= 200 then
-					table.insert(lines, '...')
-					break
-				end
-				table.insert(lines, line)
-				count = count + 1
+			local data = file:read(PREVIEW_MAX_BYTES) or ''
+			local truncated = #data == PREVIEW_MAX_BYTES and file:read(1) ~= nil
+
+			lines = vim.split(data, '\n', { plain = true })
+			if lines[#lines] == '' then
+				table.remove(lines)
+			elseif truncated then
+				-- The last line was cut mid-way
+				table.remove(lines)
+			end
+
+			if #lines > PREVIEW_MAX_LINES then
+				lines = vim.list_slice(lines, 1, PREVIEW_MAX_LINES)
+				truncated = true
+			end
+			if truncated then
+				table.insert(lines, '...')
 			end
 		end)
 		file:close()
@@ -728,30 +759,64 @@ function M.close()
 		vim.fn.timer_stop(preview_timer)
 		preview_timer = nil
 	end
+	cancel_filter_timer()
 	state.reset_state()
 end
 
 -- CRUD Operations
 
-function M.refresh_tree()
-	local tree_builder = require('file-tree.tree')
+-- Fetches git status and re-renders. Results of superseded requests, or of a
+-- tree that has since been closed, are dropped.
+function M.refresh_git_status()
+	git_request_id = git_request_id + 1
+	local request_id = git_request_id
+	local root = state.state.root
 
-	-- Rebuild tree
-	state.state.tree = tree_builder.build_tree(state.state.root)
-
-	-- Re-render
-	M.render_tree()
-
-	-- Refresh git status
-	git.get_status(state.state.root, function(status_map, ignored_paths)
+	git.get_status(root, function(status_map, ignored_paths)
 		vim.schedule(function()
+			if request_id ~= git_request_id or state.state.root ~= root then
+				return
+			end
+
 			state.state.git_status = status_map
 			state.state.git_ignored = ignored_paths
+			-- Only re-render if UI is still open
 			if state.state.tree_buf and vim.api.nvim_buf_is_valid(state.state.tree_buf) then
 				M.render_tree()
 			end
 		end)
 	end)
+end
+
+-- Rescans only `dir_path`, the directory whose entries changed. A created or
+-- renamed `changed_path` may sit in subdirectories below it (the typed name can
+-- contain slashes), so the loaded directories on the way down are rescanned too.
+function M.refresh_tree(dir_path, changed_path)
+	local dir_node = tree_mod.find_node(state.state.tree, dir_path)
+	if dir_node then
+		tree_mod.refresh_directory(dir_node)
+	end
+
+	if changed_path then
+		local current = dir_path
+		for part in changed_path:sub(#dir_path + 2):gmatch('[^/]+') do
+			current = current .. '/' .. part
+			if current == changed_path then
+				break
+			end
+			local node = tree_mod.find_node(state.state.tree, current)
+			if not node then
+				break
+			end
+			tree_mod.refresh_directory(node)
+		end
+	end
+
+	-- Re-render
+	M.render_tree()
+
+	-- Refresh git status
+	M.refresh_git_status()
 end
 
 function M.action_create()
@@ -806,7 +871,7 @@ function M.action_create()
 			if ok then
 				-- Expand parent and refresh
 				state.set_expanded(parent_dir, true)
-				M.refresh_tree()
+				M.refresh_tree(parent_dir, new_path)
 
 				-- Try to select the new item
 				vim.schedule(function()
@@ -848,7 +913,7 @@ function M.action_rename()
 			local ok = fs.rename(node.path, new_path)
 
 			if ok then
-				M.refresh_tree()
+				M.refresh_tree(parent_dir, new_path)
 
 				-- Try to select the renamed item
 				vim.schedule(function()
@@ -884,7 +949,7 @@ function M.action_delete()
 		local ok = fs.delete(node.path)
 
 		if ok then
-			M.refresh_tree()
+			M.refresh_tree(fs.get_parent(node.path))
 		else
 			vim.notify('Failed to delete ' .. node.name, vim.log.levels.ERROR)
 		end
@@ -956,14 +1021,17 @@ function M.enter_filter_mode()
 		default_value = state.state.filter_text or '',
 		on_change = function(value)
 			state.state.filter_text = value
-			-- Defer to avoid E565 error during text input
-			vim.schedule(function()
-				M.apply_filter()
-			end)
+			debounced_filter()
 		end,
 		on_submit = function(value)
 			state.state.filter_text = value
 			state.state.filter_mode = false
+			-- Flush a pending debounced render so the tree matches the text
+			if filter_timer then
+				vim.fn.timer_stop(filter_timer)
+				filter_timer = nil
+				M.apply_filter()
+			end
 			M.update_tree_title()
 			if state.state.filter_input then
 				state.state.filter_input:unmount()
@@ -973,6 +1041,7 @@ function M.enter_filter_mode()
 			vim.api.nvim_set_current_win(state.state.tree_popup.winid)
 		end,
 		on_close = function()
+			cancel_filter_timer()
 			state.state.filter_mode = false
 			state.state.filter_text = ''
 			state.state.current_idx = 1
@@ -988,6 +1057,7 @@ function M.enter_filter_mode()
 
 	-- Add Esc mapping to close filter
 	state.state.filter_input:map('i', '<Esc>', function()
+		cancel_filter_timer()
 		state.state.filter_mode = false
 		state.state.filter_text = ''
 		state.state.current_idx = 1
@@ -1020,7 +1090,7 @@ function M.apply_filter()
 		state.state.current_idx = 1
 		M.update_cursor_highlight()
 		M.sync_cursor_position()
-		M.preview_current()
+		debounced_preview()
 	end
 end
 

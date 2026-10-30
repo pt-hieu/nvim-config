@@ -3,19 +3,15 @@ local state = require('file-tree.state')
 
 local M = {}
 
-function M.build_node(path, depth)
-	local name = fs.get_name(path)
-	local is_dir = fs.is_directory(path)
-
-	local node = {
-		name = name,
-		path = path,
-		type = is_dir and 'directory' or 'file',
+function M.build_node(entry, depth)
+	return {
+		name = entry.name,
+		lower_name = entry.lower_name,
+		path = entry.path,
+		type = entry.type,
 		depth = depth,
 		children = nil,
 	}
-
-	return node
 end
 
 function M.load_children(node)
@@ -31,14 +27,67 @@ function M.load_children(node)
 	node.children = {}
 
 	for _, entry in ipairs(entries) do
-		local child = M.build_node(entry.path, node.depth + 1)
+		local child = M.build_node(entry, node.depth + 1)
 		table.insert(node.children, child)
 	end
 end
 
+-- Rescans an already loaded directory, keeping the existing node (and so its
+-- loaded subtree) for every entry that is still there.
+function M.refresh_directory(node)
+	if node.children == nil then
+		return
+	end
+
+	local existing = {}
+	for _, child in ipairs(node.children) do
+		existing[child.path] = child
+	end
+
+	node.children = {}
+
+	for _, entry in ipairs(fs.scan_directory(node.path)) do
+		local child = existing[entry.path]
+		if not child or child.type ~= entry.type then
+			child = M.build_node(entry, node.depth + 1)
+		end
+		table.insert(node.children, child)
+	end
+end
+
+-- Finds a node by path, descending only through already loaded children.
+function M.find_node(root, path)
+	if path == root.path then
+		return root
+	end
+
+	if path:sub(1, #root.path + 1) ~= root.path .. '/' then
+		return nil
+	end
+
+	local node = root
+	for part in path:sub(#root.path + 2):gmatch('[^/]+') do
+		local next_node
+		for _, child in ipairs(node.children or {}) do
+			if child.name == part then
+				next_node = child
+				break
+			end
+		end
+		if not next_node then
+			return nil
+		end
+		node = next_node
+	end
+
+	return node
+end
+
 function M.build_tree(root_path)
+	local root_name = fs.get_name(root_path)
 	local root = {
-		name = fs.get_name(root_path),
+		name = root_name,
+		lower_name = root_name:lower(),
 		path = root_path,
 		type = 'directory',
 		depth = 0,
@@ -76,10 +125,10 @@ function M.find_parent_index(visible_lines, current_idx)
 		return nil
 	end
 
-	local parent_path = fs.get_parent(current.path)
-
+	-- Visible lines are in tree order, so the parent is the nearest line above
+	-- that sits one level shallower.
 	for i = current_idx - 1, 1, -1 do
-		if visible_lines[i].path == parent_path then
+		if visible_lines[i].depth < current.depth then
 			return i
 		end
 	end
@@ -93,21 +142,16 @@ function M.find_parent_sibling_index(visible_lines, current_idx)
 		return nil
 	end
 
-	local parent_path = fs.get_parent(current.path)
-	local grandparent_path = fs.get_parent(parent_path)
-
-	-- Find nodes at grandparent level after current position
+	-- A sibling of the parent sits one level shallower than the current node.
+	-- Anything shallower than that is outside the grandparent, so stop.
 	for i = current_idx + 1, #visible_lines do
-		local node = visible_lines[i]
-		local node_parent = fs.get_parent(node.path)
+		local depth = visible_lines[i].depth
 
-		-- If we find a sibling of the parent (same grandparent, different parent)
-		if node_parent == grandparent_path and node.path ~= parent_path then
+		if depth == current.depth - 1 then
 			return i
 		end
 
-		-- If depth decreases below grandparent level, stop
-		if node.depth < current.depth - 1 then
+		if depth < current.depth - 1 then
 			break
 		end
 	end

@@ -1,27 +1,20 @@
 local M = {}
 
--- Simple fuzzy match: check if all pattern chars appear in text in order
-function M.fuzzy_match(pattern, text)
-	if not pattern or pattern == '' then
+-- Simple fuzzy match on text that is already lowercase: check if all pattern
+-- chars appear in text in order
+local function fuzzy_match_lower(pattern, text)
+	if pattern == '' then
 		return true, 0
 	end
 
-	pattern = pattern:lower()
-	text = text:lower()
-
+	local pattern_len = #pattern
 	local pattern_idx = 1
+	local pattern_byte = pattern:byte(1)
 	local score = 0
 	local consecutive = 0
 
 	for i = 1, #text do
-		if pattern_idx > #pattern then
-			break
-		end
-
-		local tc = text:sub(i, i)
-		local pc = pattern:sub(pattern_idx, pattern_idx)
-
-		if tc == pc then
+		if text:byte(i) == pattern_byte then
 			pattern_idx = pattern_idx + 1
 			consecutive = consecutive + 1
 			-- Bonus for consecutive matches
@@ -30,17 +23,26 @@ function M.fuzzy_match(pattern, text)
 			if i == 1 then
 				score = score + 20
 			end
+
+			if pattern_idx > pattern_len then
+				return true, score
+			end
+			pattern_byte = pattern:byte(pattern_idx)
 		else
 			consecutive = 0
 		end
 	end
 
 	-- All pattern chars must be found
-	if pattern_idx > #pattern then
-		return true, score
+	return false, 0
+end
+
+function M.fuzzy_match(pattern, text)
+	if not pattern or pattern == '' then
+		return true, 0
 	end
 
-	return false, 0
+	return fuzzy_match_lower(pattern:lower(), text:lower())
 end
 
 -- Filter visible lines by pattern, keeping ancestors of matching nodes
@@ -49,22 +51,22 @@ function M.filter_tree(visible_lines, pattern)
 		return visible_lines
 	end
 
+	pattern = pattern:lower()
+
 	-- First pass: find matching nodes
 	local matching_paths = {}
 	for _, node in ipairs(visible_lines) do
-		local matches, _ = M.fuzzy_match(pattern, node.name)
+		local lower_name = node.lower_name or node.name:lower()
+		local matches, _ = fuzzy_match_lower(pattern, lower_name)
 		if matches then
 			matching_paths[node.path] = true
 
-			-- Also include all ancestors
-			local parent = vim.fn.fnamemodify(node.path, ':h')
-			while parent and parent ~= '' do
+			-- Also include all ancestors. Marking a path always marks its
+			-- ancestors, so the first marked parent ends the walk.
+			local parent = node.path:match('^(.*)/')
+			while parent and parent ~= '' and not matching_paths[parent] do
 				matching_paths[parent] = true
-				local new_parent = vim.fn.fnamemodify(parent, ':h')
-				if new_parent == parent then
-					break
-				end
-				parent = new_parent
+				parent = parent:match('^(.*)/')
 			end
 		end
 	end

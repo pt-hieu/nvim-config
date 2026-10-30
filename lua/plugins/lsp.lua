@@ -25,31 +25,35 @@ return {
 		},
 	},
 
+	-- LSP progress notifications
+	{
+		'j-hui/fidget.nvim',
+		event = 'LspAttach',
+		opts = {
+			notification = {
+				window = {
+					winblend = 0,
+					border = 'rounded',
+				},
+			},
+		},
+		config = function(_, opts)
+			require('fidget').setup(opts)
+			-- Aura theme colors
+			vim.api.nvim_set_hl(0, 'FidgetTitle', { fg = '#a277ff', bold = true }) -- purple
+			vim.api.nvim_set_hl(0, 'FidgetTask', { fg = '#edecee' }) -- white
+			vim.api.nvim_set_hl(0, 'FidgetProgress', { fg = '#61ffca' }) -- green
+		end,
+	},
+
 	-- LSP Configuration
 	{
 		'neovim/nvim-lspconfig',
+		event = { 'BufReadPre', 'BufNewFile' },
 		dependencies = {
 			{ 'mason-org/mason.nvim', opts = {} },
 			'mason-org/mason-lspconfig.nvim',
 			'WhoIsSethDaniel/mason-tool-installer.nvim',
-			{
-				'j-hui/fidget.nvim',
-				opts = {
-					notification = {
-						window = {
-							winblend = 0,
-							border = 'rounded',
-						},
-					},
-				},
-				config = function(_, opts)
-					require('fidget').setup(opts)
-					-- Aura theme colors
-					vim.api.nvim_set_hl(0, 'FidgetTitle', { fg = '#a277ff', bold = true }) -- purple
-					vim.api.nvim_set_hl(0, 'FidgetTask', { fg = '#edecee' }) -- white
-					vim.api.nvim_set_hl(0, 'FidgetProgress', { fg = '#61ffca' }) -- green
-				end,
-			},
 			'saghen/blink.cmp',
 		},
 		config = function()
@@ -89,13 +93,13 @@ return {
 						and client_supports_method(client, vim.lsp.protocol.Methods.textDocument_documentHighlight, event.buf)
 					then
 						local highlight_augroup = vim.api.nvim_create_augroup('kickstart-lsp-highlight', { clear = false })
-						vim.api.nvim_create_autocmd({ 'CursorHold', 'CursorHoldI' }, {
+						vim.api.nvim_create_autocmd('CursorHold', {
 							buffer = event.buf,
 							group = highlight_augroup,
 							callback = vim.lsp.buf.document_highlight,
 						})
 
-						vim.api.nvim_create_autocmd({ 'CursorMoved', 'CursorMovedI' }, {
+						vim.api.nvim_create_autocmd('CursorMoved', {
 							buffer = event.buf,
 							group = highlight_augroup,
 							callback = vim.lsp.buf.clear_references,
@@ -184,10 +188,10 @@ return {
 			local ensure_installed = vim.tbl_keys(servers or {})
 			vim.list_extend(ensure_installed, {
 				'stylua',
-				'prettier',
+				'prettierd',
 				'eslint_d',
 			})
-			require('mason-tool-installer').setup({ ensure_installed = ensure_installed })
+			require('mason-tool-installer').setup({ ensure_installed = ensure_installed, start_delay = 3000 })
 
 			for server_name, server_config in pairs(servers) do
 				server_config.capabilities =

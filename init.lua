@@ -5,6 +5,9 @@
 --   lua/config/    - Core Neovim settings (options, keymaps, autocmds)
 --   lua/plugins/   - Plugin specifications organized by functionality
 
+-- Cache compiled Lua modules, including the config.* modules required before lazy.nvim
+vim.loader.enable()
+
 -- Leader keys (must be set before plugins load)
 vim.g.mapleader = ' '
 vim.g.maplocalleader = ' '
@@ -31,7 +34,15 @@ require('lazy').setup('plugins', {
 	performance = {
 		rtp = {
 			disabled_plugins = {
+				'gzip',
 				'matchparen',
+				'netrwPlugin',
+				'rplugin',
+				'spellfile',
+				'tarPlugin',
+				'tohtml',
+				'tutor',
+				'zipPlugin',
 			},
 		},
 	},

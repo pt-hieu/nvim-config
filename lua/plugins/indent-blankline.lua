@@ -18,6 +18,9 @@ return {
       vim.api.nvim_set_hl(0, 'IblIndent', { fg = '#1a1a1a' })
       vim.api.nvim_set_hl(0, 'IblScope', { fg = '#a277ff' })
     end)
+    hooks.register(hooks.type.ACTIVE, function(bufnr)
+      return not require('config.large_file')(bufnr)
+    end)
     require('ibl').setup(opts)
   end,
 }

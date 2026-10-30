@@ -2,6 +2,7 @@ return {
 	-- Git signs in gutter
 	{
 		'lewis6991/gitsigns.nvim',
+		event = { 'BufReadPre', 'BufNewFile' },
 		opts = {
 			signs = {
 				add = { text = '+' },

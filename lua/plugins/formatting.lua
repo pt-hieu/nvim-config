@@ -21,20 +21,20 @@ return {
 				return nil
 			else
 				return {
-					timeout_ms = 500,
+					timeout_ms = 1000,
 					lsp_format = 'fallback',
 				}
 			end
 		end,
 		formatters_by_ft = {
 			lua = { 'stylua' },
-			javascript = { 'prettier' },
-			typescript = { 'prettier' },
-			javascriptreact = { 'prettier' },
-			typescriptreact = { 'prettier' },
-			css = { 'prettier' },
-			html = { 'prettier' },
-			json = { 'prettier' },
+			javascript = { 'prettierd' },
+			typescript = { 'prettierd' },
+			javascriptreact = { 'prettierd' },
+			typescriptreact = { 'prettierd' },
+			css = { 'prettierd' },
+			html = { 'prettierd' },
+			json = { 'prettierd' },
 		},
 	},
 }

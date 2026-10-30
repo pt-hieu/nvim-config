@@ -2,7 +2,6 @@ local state = require('file-tree.state')
 local tree = require('file-tree.tree')
 local ui = require('file-tree.ui')
 local fs = require('file-tree.fs')
-local git = require('file-tree.git')
 
 local M = {}
 
@@ -34,21 +33,13 @@ function M.open()
 			state.set_selection(idx)
 			ui.update_cursor_highlight()
 			ui.sync_cursor_position()
-			ui.preview_current()
 		end
 	end
 
+	ui.preview_current()
+
 	-- Fetch git status async and re-render when done
-	git.get_status(root, function(status_map, ignored_paths)
-		vim.schedule(function()
-			state.state.git_status = status_map
-			state.state.git_ignored = ignored_paths
-			-- Only re-render if UI is still open
-			if state.state.tree_buf and vim.api.nvim_buf_is_valid(state.state.tree_buf) then
-				ui.render_tree()
-			end
-		end)
-	end)
+	ui.refresh_git_status()
 end
 
 function M.reveal_path(path)
@@ -58,12 +49,20 @@ function M.reveal_path(path)
 	local parts = vim.split(relative, '/', { plain = true })
 
 	local current_path = root
+	local node = state.state.tree
 	for i = 1, #parts - 1 do -- Exclude the file itself
 		current_path = current_path .. '/' .. parts[i]
 		state.set_expanded(current_path, true)
 
-		-- Load children for this path
-		local node = M.find_node_by_path(state.state.tree, current_path)
+		-- Walk down to the child by name and load its children
+		local child
+		for _, candidate in ipairs(node and node.children or {}) do
+			if candidate.name == parts[i] then
+				child = candidate
+				break
+			end
+		end
+		node = child
 		if node then
 			tree.load_children(node)
 		end

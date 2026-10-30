@@ -15,7 +15,23 @@ local MIN_COMMIT_WIDTH = 30
 -- Module-level namespaces (created once, reused across renders)
 local ns_commits = vim.api.nvim_create_namespace('git-history')
 local ns_cursor = vim.api.nvim_create_namespace('git-history-cursor')
-local ns_diff = vim.api.nvim_create_namespace('git-history-diff')
+
+-- Diff syntax (and treesitter) groups remapped to the plugin's highlight groups
+-- through 'winhighlight', so the user's global diff colors stay untouched.
+local DIFF_WINHIGHLIGHT = table.concat({
+  'diffAdded:GitHistoryDiffAdd',
+  'diffRemoved:GitHistoryDiffDelete',
+  'diffChanged:GitHistoryDiffHunk',
+  'diffLine:GitHistoryDiffHunk',
+  'diffSubname:GitHistoryDiffHunk',
+  'diffFile:GitHistoryDiffHeader',
+  'diffOldFile:GitHistoryDiffHeader',
+  'diffNewFile:GitHistoryDiffHeader',
+  'diffIndexLine:GitHistoryDiffHeader',
+  '@diff.plus:GitHistoryDiffAdd',
+  '@diff.minus:GitHistoryDiffDelete',
+  '@diff.delta:GitHistoryDiffHunk',
+}, ',')
 
 function M.create_and_show()
   -- Create popups
@@ -74,16 +90,18 @@ function M.create_and_show()
   vim.bo[state.state.commit_buf].buftype = 'nofile'
   vim.bo[state.state.preview_buf].modifiable = false
   vim.bo[state.state.preview_buf].buftype = 'nofile'
+  vim.bo[state.state.preview_buf].filetype = 'diff'
   vim.wo[state.state.preview_popup.winid].number = true
+  -- Map diff syntax groups to the Aura colors for this window only
+  vim.wo[state.state.preview_popup.winid].winhighlight = DIFF_WINHIGHLIGHT
 
   -- Set up keymaps
   M.setup_keymaps()
 
-  -- Render commit list
-  M.render_commit_list()
-
-  -- Preview first commit
-  M.preview_selected_commit()
+  -- Placeholder until the first page of history arrives
+  vim.bo[state.state.commit_buf].modifiable = true
+  vim.api.nvim_buf_set_lines(state.state.commit_buf, 0, -1, false, { 'Loading…' })
+  vim.bo[state.state.commit_buf].modifiable = false
 end
 
 function M.setup_keymaps()
@@ -128,15 +146,26 @@ function M.setup_keymaps()
   end, opts)
 end
 
-function M.render_commit_list()
+-- Commits are fetched in pages; the next page loads when the cursor is within
+-- PAGE_PREFETCH commits of the end of the loaded list.
+local PAGE_SIZE = 50
+local PAGE_PREFETCH = 10
+local PREVIEW_DEBOUNCE_MS = 75
+local LINES_PER_COMMIT = 4
+
+-- Append the lines and highlights for `commits` (starting at index `first_idx`)
+-- to the commit buffer. The first append also replaces the loading placeholder.
+function M.append_commits(commits, first_idx)
   local lines = {}
   local highlights = {}
+  local base = (first_idx - 1) * LINES_PER_COMMIT
 
-  for i, commit in ipairs(state.state.commits) do
-    local line_start = #lines
+  for _, commit in ipairs(commits) do
+    local line_start = base + #lines
 
     -- Line 1: ● hash  (date)
-    table.insert(lines, string.format('● %s  (%s)', commit.short_hash, commit.relative_date))
+    local header = string.format('● %s  (%s)', commit.short_hash, commit.relative_date)
+    table.insert(lines, header)
     table.insert(highlights, {
       line = line_start,
       col_start = 2,
@@ -146,26 +175,27 @@ function M.render_commit_list()
     table.insert(highlights, {
       line = line_start,
       col_start = 2 + #commit.short_hash + 3,
-      col_end = -1,
+      col_end = #header,
       hl_group = 'GitHistoryDate',
     })
 
     -- Line 2: author
-    table.insert(lines, '  ' .. commit.author)
+    local author = '  ' .. commit.author
+    table.insert(lines, author)
     table.insert(highlights, {
       line = line_start + 1,
       col_start = 2,
-      col_end = -1,
+      col_end = #author,
       hl_group = 'GitHistoryAuthor',
     })
 
     -- Line 3: message
-    local message = commit.message:sub(1, 50)
-    table.insert(lines, '  ' .. message)
+    local message = '  ' .. commit.message:sub(1, 50)
+    table.insert(lines, message)
     table.insert(highlights, {
       line = line_start + 2,
       col_start = 2,
-      col_end = -1,
+      col_end = #message,
       hl_group = 'GitHistoryMessage',
     })
 
@@ -173,33 +203,66 @@ function M.render_commit_list()
     table.insert(lines, '')
   end
 
-  -- Update buffer
+  -- Update buffer (appends; the first page overwrites the loading line)
   vim.bo[state.state.commit_buf].modifiable = true
-  vim.api.nvim_buf_set_lines(state.state.commit_buf, 0, -1, false, lines)
+  vim.api.nvim_buf_set_lines(state.state.commit_buf, base, -1, false, lines)
   vim.bo[state.state.commit_buf].modifiable = false
 
-  -- Apply highlights
-  vim.api.nvim_buf_clear_namespace(state.state.commit_buf, ns_commits, 0, -1)
+  -- Apply highlights for the appended chunk only
   for _, hl in ipairs(highlights) do
-    if hl.col_end == -1 then
-      -- To end of line: use extmark with hl_group, no end_col restricts to char; use add_highlight for -1 range
-      vim.api.nvim_buf_add_highlight(state.state.commit_buf, ns_commits, hl.hl_group, hl.line, hl.col_start, -1)
-    else
-      vim.api.nvim_buf_set_extmark(state.state.commit_buf, ns_commits, hl.line, hl.col_start, {
-        end_col = hl.col_end,
-        hl_group = hl.hl_group,
-      })
-    end
+    vim.api.nvim_buf_set_extmark(state.state.commit_buf, ns_commits, hl.line, hl.col_start, {
+      end_col = hl.col_end,
+      hl_group = hl.hl_group,
+    })
   end
+end
 
-  -- Highlight first commit
-  M.update_cursor_highlight()
+-- Fetch the next page of history and append it to the list.
+function M.load_more()
+  local s = state.state
+  if s.loading_page or s.exhausted or not s.git_root then
+    return
+  end
+  s.loading_page = true
+
+  local skip = #s.commits
+  git.get_file_history(s.git_root, s.file_path, skip, PAGE_SIZE, function(err, commits)
+    vim.schedule(function()
+      if state.state ~= s then
+        return
+      end
+      s.loading_page = false
+
+      if err then
+        M.close()
+        vim.notify('Error fetching git history: ' .. err, vim.log.levels.ERROR)
+        return
+      end
+      if #commits < PAGE_SIZE then
+        s.exhausted = true
+      end
+      if #commits == 0 then
+        if skip == 0 then
+          M.close()
+          vim.notify('No commits found for this file', vim.log.levels.INFO)
+        end
+        return
+      end
+
+      vim.list_extend(s.commits, commits)
+      M.append_commits(commits, skip + 1)
+      if skip == 0 then
+        M.update_cursor_highlight()
+        M.preview_selected_commit()
+      end
+    end)
+  end)
 end
 
 function M.move_cursor(direction)
   if state.move_selection(direction) then
     -- Update visual cursor
-    local cursor_line = (state.state.current_idx - 1) * 4 + 1
+    local cursor_line = (state.state.current_idx - 1) * LINES_PER_COMMIT + 1
     local win = state.state.commit_popup.winid
     vim.api.nvim_win_set_cursor(win, { cursor_line, 0 })
 
@@ -208,6 +271,11 @@ function M.move_cursor(direction)
 
     -- Auto-preview
     M.preview_selected_commit()
+
+    -- Prefetch the next page near the end of the list
+    if state.state.current_idx > #state.state.commits - PAGE_PREFETCH then
+      M.load_more()
+    end
   end
 end
 
@@ -215,7 +283,7 @@ function M.update_cursor_highlight()
   vim.api.nvim_buf_clear_namespace(state.state.commit_buf, ns_cursor, 0, -1)
 
   -- Highlight 3 lines (skip blank line) using line_hl_group for full-line coverage
-  local start_line = (state.state.current_idx - 1) * 4
+  local start_line = (state.state.current_idx - 1) * LINES_PER_COMMIT
   for i = 0, 2 do
     vim.api.nvim_buf_set_extmark(state.state.commit_buf, ns_cursor, start_line + i, 0, {
       line_hl_group = 'GitHistoryCursor',
@@ -223,69 +291,66 @@ function M.update_cursor_highlight()
   end
 end
 
-function M.preview_selected_commit()
-  local commit = state.get_current_commit()
-
-  -- Update preview title to indicate diff view
-  if state.state.preview_popup and vim.api.nvim_win_is_valid(state.state.preview_popup.winid) then
-    state.state.preview_popup.border:set_text('top', ' Diff @ ' .. commit.short_hash .. ' ', 'center')
+local function render_preview(s, lines)
+  if state.state ~= s or not vim.api.nvim_buf_is_valid(s.preview_buf) then
+    return
   end
-
-  -- Fetch commit diff
-  git.get_commit_diff(commit.full_hash, state.state.file_path, function(err, lines)
-    if err then
-      lines = { '--- ' .. err .. ' ---' }
-    end
-
-    -- Update preview buffer
-    vim.schedule(function()
-      if not vim.api.nvim_buf_is_valid(state.state.preview_buf) then
-        return
-      end
-      vim.bo[state.state.preview_buf].modifiable = true
-      vim.api.nvim_buf_set_lines(state.state.preview_buf, 0, -1, false, lines)
-      vim.bo[state.state.preview_buf].modifiable = false
-
-      -- Set filetype to diff for syntax highlighting
-      vim.bo[state.state.preview_buf].filetype = 'diff'
-
-      -- Apply custom highlights
-      M.apply_diff_highlights()
-    end)
-  end)
+  vim.bo[s.preview_buf].modifiable = true
+  vim.api.nvim_buf_set_lines(s.preview_buf, 0, -1, false, lines)
+  vim.bo[s.preview_buf].modifiable = false
 end
 
-function M.apply_diff_highlights()
-  vim.api.nvim_buf_clear_namespace(state.state.preview_buf, ns_diff, 0, -1)
-
-  local lines = vim.api.nvim_buf_get_lines(state.state.preview_buf, 0, -1, false)
-
-  for i, line in ipairs(lines) do
-    local hl_group = nil
-
-    if line:match('^%+') and not line:match('^%+%+%+') then
-      -- Addition line (starts with + but not +++)
-      hl_group = 'GitHistoryDiffAdd'
-    elseif line:match('^%-') and not line:match('^%-%-%- ') then
-      -- Deletion line (starts with - but not ---)
-      hl_group = 'GitHistoryDiffDelete'
-    elseif line:match('^@@') then
-      -- Hunk header
-      hl_group = 'GitHistoryDiffHunk'
-    elseif line:match('^diff ') or line:match('^index ') or line:match('^%+%+%+ ') or line:match('^%-%-%- ') then
-      -- Diff header lines
-      hl_group = 'GitHistoryDiffHeader'
-    else
-      -- Context lines (unchanged)
-      hl_group = 'GitHistoryDiffContext'
-    end
-
-    if hl_group then
-      vim.api.nvim_buf_set_extmark(state.state.preview_buf, ns_diff, i - 1, 0, {
-        line_hl_group = hl_group,
-      })
-    end
+function M.preview_selected_commit()
+  local s = state.state
+  local commit = state.get_current_commit()
+  if not commit then
+    return
   end
+
+  -- Update preview title to indicate diff view
+  if s.preview_popup and s.preview_popup.winid and vim.api.nvim_win_is_valid(s.preview_popup.winid) then
+    s.preview_popup.border:set_text('top', ' Diff @ ' .. commit.short_hash .. ' ', 'center')
+  end
+
+  -- Any newer selection supersedes the pending timer and in-flight request
+  s.preview_req = s.preview_req + 1
+  local req = s.preview_req
+  if s.preview_timer then
+    s.preview_timer:stop()
+  end
+  if s.preview_proc then
+    s.preview_proc:kill(15)
+    s.preview_proc = nil
+  end
+
+  local cached = s.diff_cache[commit.full_hash]
+  if cached then
+    render_preview(s, cached)
+    return
+  end
+
+  s.preview_timer = s.preview_timer or vim.uv.new_timer()
+  s.preview_timer:start(PREVIEW_DEBOUNCE_MS, 0, function()
+    vim.schedule(function()
+      if state.state ~= s or s.preview_req ~= req then
+        return
+      end
+      s.preview_proc = git.get_commit_diff(s.git_root, commit.full_hash, commit.path, function(err, lines)
+        vim.schedule(function()
+          if state.state ~= s or s.preview_req ~= req then
+            return
+          end
+          s.preview_proc = nil
+          if err then
+            lines = { '--- ' .. err .. ' ---' }
+          else
+            s.diff_cache[commit.full_hash] = lines
+          end
+          render_preview(s, lines)
+        end)
+      end)
+    end)
+  end)
 end
 
 function M.close()

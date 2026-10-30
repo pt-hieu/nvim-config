@@ -7,6 +7,7 @@ M.file_default = '\u{f15b}' --
 
 -- Cache
 local devicons = nil
+local file_icon_cache = {}
 
 function M.get_icon(name, type, is_open)
 	if type == 'directory' then
@@ -24,10 +25,17 @@ function M.get_icon(name, type, is_open)
 	end
 
 	if devicons then
+		local cached = file_icon_cache[name]
+		if cached then
+			return cached[1], cached[2]
+		end
+
 		local ext = vim.fn.fnamemodify(name, ':e')
 		local icon, hl = devicons.get_icon(name, ext, { default = true })
 		if icon and icon ~= '' then
-			return icon, hl or 'FileTreeFile'
+			hl = hl or 'FileTreeFile'
+			file_icon_cache[name] = { icon, hl }
+			return icon, hl
 		end
 	end
 

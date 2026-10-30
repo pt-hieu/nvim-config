@@ -14,29 +14,27 @@ function M.scan_directory(path)
 			break
 		end
 
-		-- Determine type if not provided (some filesystems don't report it)
-		if not type then
-			local full_path = path .. '/' .. name
-			local stat = vim.uv.fs_stat(full_path)
+		-- Determine type if not provided (some filesystems don't report it).
+		-- Symlinks are resolved to what they point at.
+		if not type or type == 'link' then
+			local stat = vim.uv.fs_stat(path .. '/' .. name)
 			type = stat and stat.type or 'file'
 		end
 
 		table.insert(entries, {
 			name = name,
-			type = type,
+			type = type == 'directory' and 'directory' or 'file',
 			path = path .. '/' .. name,
+			lower_name = name:lower(),
 		})
 	end
 
 	-- Sort: directories first, then alphabetically
 	table.sort(entries, function(a, b)
-		if a.type == 'directory' and b.type ~= 'directory' then
-			return true
-		elseif a.type ~= 'directory' and b.type == 'directory' then
-			return false
-		else
-			return a.name:lower() < b.name:lower()
+		if a.type ~= b.type then
+			return a.type == 'directory'
 		end
+		return a.lower_name < b.lower_name
 	end)
 
 	return entries

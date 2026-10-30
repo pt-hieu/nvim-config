@@ -3,7 +3,6 @@ return {
     dir = vim.fn.stdpath('config') .. '/lua/git-history',
     name = 'git-history',
     dependencies = {
-      'nvim-lua/plenary.nvim',
       'MunifTanjim/nui.nvim',
       'nvim-tree/nvim-web-devicons',
     },

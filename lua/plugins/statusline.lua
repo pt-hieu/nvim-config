@@ -30,6 +30,11 @@ return {
 				colors = colors,
 			},
 			statusline = {
+				-- Mode color shared by the separators and progress
+				init = function(self)
+					self.mode_color = mode_colors[vim.fn.mode(1):sub(1, 1)] or colors.purple
+				end,
+
 				-- Mode
 				{
 					init = function(self)
@@ -72,9 +77,8 @@ return {
 				-- Mode separator
 				{
 					provider = '',
-					hl = function()
-						local mode = vim.fn.mode(1):sub(1, 1)
-						return { fg = mode_colors[mode] or colors.purple, bg = colors.bg }
+					hl = function(self)
+						return { fg = self.mode_color, bg = colors.bg }
 					end,
 				},
 
@@ -163,6 +167,7 @@ return {
 						return ' ' .. filename
 					end,
 					hl = { fg = colors.white, bg = colors.black },
+					update = { 'BufEnter', 'BufFilePost' },
 				},
 				{
 					provider = function()
@@ -174,13 +179,14 @@ return {
 						return ''
 					end,
 					hl = { fg = colors.orange, bg = colors.black },
+					update = { 'BufEnter', 'BufModifiedSet', 'OptionSet' },
 				},
 				{ provider = '%=', hl = { bg = colors.black } },
 
 				-- LSP clients
 				{
 					condition = conditions.lsp_attached,
-					update = { 'LspAttach', 'LspDetach' },
+					update = { 'LspAttach', 'LspDetach', 'BufEnter' },
 					static = {
 						lsp_labels = {
 							ts_ls = 'TS',
@@ -221,32 +227,30 @@ return {
 						return ' ' .. (self.icon or '') .. ' ' .. ft .. ' '
 					end,
 					hl = { fg = colors.black, bg = colors.green },
+					update = { 'BufEnter', 'BufFilePost', 'FileType' },
 				},
 
 				-- Right separator
 				{
 					provider = '',
-					hl = function()
-						local mode = vim.fn.mode(1):sub(1, 1)
-						return { fg = mode_colors[mode] or colors.purple, bg = colors.bg }
+					hl = function(self)
+						return { fg = self.mode_color, bg = colors.bg }
 					end,
 				},
 
 				-- Progress
 				{
 					provider = '  %3p%%  ',
-					hl = function()
-						local mode = vim.fn.mode(1):sub(1, 1)
-						return { bg = mode_colors[mode] or colors.purple, fg = colors.black }
+					hl = function(self)
+						return { bg = self.mode_color, fg = colors.black }
 					end,
 				},
 
 				-- Location separator
 				{
 					provider = '',
-					hl = function()
-						local mode = vim.fn.mode(1):sub(1, 1)
-						return { fg = colors.black, bg = mode_colors[mode] or colors.purple }
+					hl = function(self)
+						return { fg = colors.black, bg = self.mode_color }
 					end,
 				},
 
