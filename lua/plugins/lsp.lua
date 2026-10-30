@@ -49,7 +49,9 @@ return {
 	-- LSP Configuration
 	{
 		'neovim/nvim-lspconfig',
-		event = { 'BufReadPre', 'BufNewFile' },
+		-- Load after filetype detection: vim.lsp.enable() fires FileType on open buffers, which during a
+		-- session restore would make :setf skip the buffer being read
+		event = 'FileType',
 		-- TypeScript 7 for projects pinned to an older TypeScript; mason's tsgo is a stale preview
 		build = function()
 			vim.system({ 'npm', 'install', '--prefix', vim.fn.stdpath('data') .. '/typescript-7', 'typescript@7' }):wait()
