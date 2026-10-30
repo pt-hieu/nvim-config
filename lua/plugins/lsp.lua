@@ -50,6 +50,10 @@ return {
 	{
 		'neovim/nvim-lspconfig',
 		event = { 'BufReadPre', 'BufNewFile' },
+		-- TypeScript 7 for projects pinned to an older TypeScript; mason's tsgo is a stale preview
+		build = function()
+			vim.system({ 'npm', 'install', '--prefix', vim.fn.stdpath('data') .. '/typescript-7', 'typescript@7' }):wait()
+		end,
 		dependencies = {
 			{ 'mason-org/mason.nvim', opts = {} },
 			'mason-org/mason-lspconfig.nvim',
@@ -157,7 +161,18 @@ return {
 					},
 				},
 				eslint = {},
-				ts_ls = {
+				tsgo = {
+					-- Use the project's TypeScript when it is 7 or newer, otherwise the copy installed by build
+					cmd = function(dispatchers, config)
+						local tsc = vim.fn.stdpath('data') .. '/typescript-7/node_modules/.bin/tsc'
+						local ok, pkg = pcall(function()
+							return vim.json.decode(table.concat(vim.fn.readfile(config.root_dir .. '/node_modules/typescript/package.json'), '\n'))
+						end)
+						if ok and tonumber(pkg.version:match('^%d+')) >= 7 then
+							tsc = config.root_dir .. '/node_modules/.bin/tsc'
+						end
+						return vim.lsp.rpc.start({ tsc, '--lsp', '--stdio' }, dispatchers)
+					end,
 					settings = {
 						typescript = {
 							inlayHints = {
@@ -185,7 +200,9 @@ return {
 			}
 
 			-- Ensure tools are installed
-			local ensure_installed = vim.tbl_keys(servers or {})
+			local ensure_installed = vim.tbl_filter(function(name)
+				return name ~= 'tsgo'
+			end, vim.tbl_keys(servers))
 			vim.list_extend(ensure_installed, {
 				'stylua',
 				'prettierd',
@@ -201,8 +218,9 @@ return {
 
 			require('mason-lspconfig').setup({
 				ensure_installed = {},
-				automatic_enable = true,
+				automatic_enable = { exclude = { 'ts_ls' } },
 			})
+			vim.lsp.enable('tsgo')
 		end,
 	},
 }
