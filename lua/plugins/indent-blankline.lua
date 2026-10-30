@@ -6,9 +6,9 @@ return {
     indent = {
       char = '▏',
     },
+    -- hlchunk.nvim draws the current scope
     scope = {
-      show_start = false,
-      show_end = false,
+      enabled = false,
     },
   },
   config = function(_, opts)
